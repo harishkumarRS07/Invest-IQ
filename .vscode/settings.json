@@ -1,0 +1,19 @@
+{
+    "python.defaultInterpreterPath": "d:\\InvestIQ-main\\venv\\Scripts\\python.exe",
+    "python.analysis.extraPaths": [
+        "d:\\InvestIQ-main",
+        "d:\\InvestIQ-main\\backend"
+    ],
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.diagnosticMode": "workspace",
+    "python.languageServer": "Pylance",
+    "python.analysis.indexing": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.pyreEnabled": false,
+    "python.linting.mypyEnabled": false,
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.autoImportCompletions": true,
+    "git.ignoreLimitWarning": true
+}

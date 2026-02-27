@@ -1,0 +1,7 @@
+Evaluation Report for HDFCBANK
+MSE: 0.9967
+RMSE: 0.9984
+MAE: 0.6763
+R2: -0.0000
+MAPE: 138.0017
+Directional_Accuracy: 49.3701

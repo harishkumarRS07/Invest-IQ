@@ -1,5 +1,5 @@
 @echo off
-echo Running AI Financial Platform Demo...
-call backend\venv\Scripts\activate
-python demo.py
+echo Running InvestIQ AI Financial Platform Demo...
+call venv\Scripts\activate
+python backend\scripts\demo.py
 pause

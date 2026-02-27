@@ -1,0 +1,4 @@
+Backtest Results for HDFCBANK
+Total Return: 8516.35%
+Sharpe Ratio: 0.83
+Max Drawdown: -55.32%

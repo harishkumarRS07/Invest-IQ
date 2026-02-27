@@ -45,12 +45,52 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
         # Log Return (Target Variable)
         # We calculate it here so it's available for feature engineering too (autocorrelation)
         df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1))
-        
+
+        # Volume Change
+        df['Volume_Change'] = df['Volume'].pct_change()
+
+        # Rolling Volatility (Standard Deviation of Log Returns)
+        df['Rolling_Volatility'] = df['Log_Return'].rolling(window=20).std()
+
+        # Handle infinite values created by log(0) or division by 0
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
         # Drop NaNs created by indicators (e.g. first 50 rows for SMA_50)
         df = df.dropna()
         
         logger.info("Technical indicators added successfully")
         return df
+
     except Exception as e:
         logger.error(f"Error adding indicators: {e}")
         raise e
+
+def add_market_correlation(df: pd.DataFrame, market_df: pd.DataFrame, window: int = 50) -> pd.DataFrame:
+    """
+    Add correlation with market index (e.g. NIFTY 50).
+    Expects market_df to have datetime index and 'Close' column.
+    """
+    try:
+        df = df.copy()
+        
+        # Ensure indices match (dates)
+        if market_df is None or market_df.empty:
+            logger.warning("Market data provided is empty. Skipping correlation.")
+            df['Market_Correlation'] = 0.0
+            return df
+
+        stock_returns = df['Log_Return']
+        market_returns = np.log(market_df['Close'] / market_df['Close'].shift(1))
+        
+        # Align series
+        aligned_market_returns = market_returns.reindex(stock_returns.index)
+        
+        # Calculate Rolling Correlation
+        df['Market_Correlation'] = stock_returns.rolling(window=window).corr(aligned_market_returns)
+        df['Market_Correlation'] = df['Market_Correlation'].fillna(0)
+        
+        return df
+    except Exception as e:
+        logger.error(f"Error adding market correlation: {e}")
+        return df
+

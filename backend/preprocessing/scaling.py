@@ -1,13 +1,17 @@
 import pandas as pd
 import joblib
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import os
 from backend.core.config import settings
 from backend.core.logging import logger
 
 class StockScaler:
-    def __init__(self):
-        self.scaler = MinMaxScaler(feature_range=(0, 1))
+    def __init__(self, scaler_type: str = 'minmax'):
+        self.scaler_type = scaler_type
+        if scaler_type == 'standard':
+            self.scaler = StandardScaler()
+        else:
+            self.scaler = MinMaxScaler(feature_range=(0, 1))
         self.feature_columns = []
 
     def fit_transform(self, df: pd.DataFrame, columns: list) -> pd.DataFrame:
@@ -44,7 +48,8 @@ class StockScaler:
         path = os.path.join(settings.MODEL_DIR, name)
         state = {
             'scaler': self.scaler,
-            'feature_columns': self.feature_columns
+            'feature_columns': self.feature_columns,
+            'scaler_type': self.scaler_type
         }
         joblib.dump(state, path)
         logger.info(f"Scaler saved to {path}")
@@ -54,4 +59,6 @@ class StockScaler:
         state = joblib.load(path)
         self.scaler = state['scaler']
         self.feature_columns = state['feature_columns']
+        # Handle backward compatibility for old scalers without 'scaler_type'
+        self.scaler_type = state.get('scaler_type', 'minmax')
         logger.info(f"Scaler loaded from {path}")

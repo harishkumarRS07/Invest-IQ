@@ -21,7 +21,7 @@ class ExternalDataSimulator:
     @staticmethod
     def fetch_live_sentiment(ticker_symbol: str) -> float:
         """
-        Fetch REAL news sentiment using yfinance and TextBlob.
+        Fetch REAL news sentiment using yfinance and FinBERT.
         Used during inference for real-time prediction.
         """
         try:
@@ -41,18 +41,22 @@ class ExternalDataSimulator:
                 logger.warning(f"No news found for {search_ticker}, returning neutral.")
                 return 0.0
                 
-            total_sentiment = 0
-            count = 0
-            
+            # Collect all titles
+            titles = []
             for article in news:
-                title = article.get('title', '')
-                analysis = TextBlob(title)
-                total_sentiment += analysis.sentiment.polarity
-                count += 1
-                
-            if count == 0: return 0.0
+                content = article.get('content', {})
+                if isinstance(content, dict):
+                    title = content.get('title', '')
+                    if title:
+                        titles.append(title)
             
-            avg_sentiment = total_sentiment / count
+            if not titles:
+                return 0.0
+            
+            # Use our improved SentimentAnalyzer
+            from backend.features.sentiment import sentiment_analyzer
+            avg_sentiment = sentiment_analyzer.analyze(titles)
+            
             logger.info(f"Live Sentiment for {ticker_symbol}: {avg_sentiment:.4f}")
             return avg_sentiment
             
@@ -100,3 +104,19 @@ class ExternalDataSimulator:
         df['Macro_Score'] = np.array(macro_scores)
         
         return df
+
+    @staticmethod
+    def fetch_market_index(ticker: str = "^NSEI", start_date: str = None, end_date: str = None) -> pd.DataFrame:
+        """
+        Fetch market index data (e.g., NIFTY 50) for correlation analysis.
+        """
+        try:
+            logger.info(f"Fetching market index data for {ticker}...")
+            data = yf.download(ticker, start=start_date, end=end_date, progress=False)
+            if data.empty:
+                logger.warning(f"No data found for market index {ticker}")
+                return pd.DataFrame()
+            return data
+        except Exception as e:
+            logger.error(f"Error fetching market index: {e}")
+            return pd.DataFrame()

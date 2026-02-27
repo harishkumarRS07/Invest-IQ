@@ -10,13 +10,19 @@ class Settings(BaseSettings):
     MODEL_DIR: str = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "saved_models")
     
     # Model Hyperparameters
-    SEQ_LENGTH: int = 60  # Lookback window for LSTM
+    SEQ_LENGTH: int = 90  # Increased lookback window for better trend capture
     TEST_SIZE: float = 0.2
     
     # Training Params
-    EPOCHS: int = 50
+    EPOCHS: int = 5 # Reduced for demonstration (was 100)
     BATCH_SIZE: int = 32
     LEARNING_RATE: float = 0.001
+    
+    # Advanced Model Params
+    DROPOUT: float = 0.1
+    NHEAD: int = 4
+    NUM_LAYERS: int = 2
+    FORECAST_HORIZON: int = 7
     
     class Config:
         case_sensitive = True

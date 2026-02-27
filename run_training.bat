@@ -1,7 +1,7 @@
 @echo off
-echo Starting AI Model Training...
-echo This will fetch data and train deep learning models for HDFCBANK, RELIANCE, TCS, and INFY.
+echo Starting InvestIQ AI Model Training...
+echo This will fetch data and train deep learning models for HDFCBANK, RELIANCE, TCS, INFY, ICICIBANK.
 echo Please wait...
-call backend\venv\Scripts\activate
-python train_all.py
+call venv\Scripts\activate
+python backend\scripts\train_all.py
 pause

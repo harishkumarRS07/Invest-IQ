@@ -1,243 +1,210 @@
-import torch
+import sys
+import os
 import glob
-import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 import pandas as pd
-import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from backend.core.config import settings
 from backend.core.logging import logger
 from backend.preprocessing.cleaning import load_data, clean_data
 from backend.preprocessing.scaling import StockScaler
-from backend.features.indicators import add_technical_indicators
-from backend.models.lstm_attention import LSTMAttentionModel
-from backend.models.xgboost_fusion import XGBoostFusionModel
+from backend.features.indicators import add_technical_indicators, add_market_correlation
+from backend.features.external_data import ExternalDataSimulator
+from backend.models.transformer import TimeSeriesTransformer
+from backend.utils.training_utils import EarlyStopping
 
-def create_sequences(data: np.ndarray, seq_length: int, target_col_idx: int = 0):
-    """Create sequences for LSTM"""
+# Ensure project root is in path
+sys.path.append(os.getcwd())
+
+def create_sequences(data: np.ndarray, seq_length: int, forecast_horizon: int, target_col_idx: int):
+    """
+    Create sequences for Transformer.
+    X: (samples, seq_length, features)
+    y: (samples, forecast_horizon, 1) -> Predicting 'Close' or 'Log_Return' for next k days
+    """
     sequences = []
     targets = []
-    for i in range(len(data) - seq_length):
-        seq = data[i:i+seq_length]
-        target = data[i+seq_length, target_col_idx]  # Predicting next step
+    
+    # We need data for i to i+seq_length (Input)
+    # And targets for i+seq_length to i+seq_length+forecast_horizon (Output)
+    
+    num_samples = len(data) - seq_length - forecast_horizon + 1
+    
+    for i in range(num_samples):
+        seq = data[i : i+seq_length] # Input Sequence
+        
+        # Target Sequence (next `forecast_horizon` steps)
+        # We predict the target column values
+        target = data[i+seq_length : i+seq_length+forecast_horizon, target_col_idx]
+        
         sequences.append(seq)
         targets.append(target)
+        
     return np.array(sequences), np.array(targets)
 
 def train_pipeline(file_path: str):
     ticker = os.path.basename(file_path).replace(".csv", "")
-    logger.info(f"Starting training pipeline for {ticker} from {file_path}")
+    logger.info(f"Starting advanced training pipeline for {ticker}...")
     
     # 1. Load and Preprocess
     try:
         df = load_data(file_path)
     except Exception as e:
-        logger.error(f"Skipping {ticker} due to load error: {e}")
-        return f"Failed to load {ticker}"
-
+        logger.error(f"Failed to load {ticker}: {e}")
+        return
+        
     df = clean_data(df)
-    df = add_technical_indicators(df)
     
-    # Define features
-    # Define features
-    feature_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'SMA_20', 'SMA_50', 'RSI', 'BB_High', 'BB_Low', 'VWAP', 'MACD', 'MACD_Signal', 'ATR', 'Log_Return']
+    # 2. Feature Engineering
+    # Fetch Market Index (Only once per run ideally, but here per file for simplicity)
+    # To avoid repeated API calls, we could fetch once outside, but let's try to fetch here.
+    # In production, this should be cached.
+    market_df = ExternalDataSimulator.fetch_market_index(start_date=df.index[0], end_date=df.index[-1])
+    
+    df = add_technical_indicators(df)
+    df = add_market_correlation(df, market_df)
+    
+    # Add External Data (Sentiment/Macro) - For training we simulate or fetch historic if available
+    # For now, let's use the simulator for sentiment/macro as placeholders if real data isn't fully piped
+    df = ExternalDataSimulator.add_external_features(df, ticker)
+    
+    # Drop rows with NaNs after feature engineering
+    df = df.dropna()
+    
+    if len(df) < settings.SEQ_LENGTH + settings.FORECAST_HORIZON + 100:
+        logger.warning(f"Insufficient data for {ticker} after preprocessing.")
+        return
+
+    # 3. Define Features and Target
+    # We want to use all available numeric columns as features
+    feature_cols = [col for col in df.columns if col not in ['Date', 'Symbol']]
+    
+    # Target: We usually predict Close price or Log Return. 
+    # Let's predict 'Log_Return' for stationarity, or 'Close' if we want direct price.
+    # Predicting 'Close' with Transformer is fine if scaled properly.
+    # But 'Log_Return' is better for gradients. Let's stick to 'Log_Return' as primary target.
     target_col = 'Log_Return'
+    if target_col not in feature_cols:
+        # Fallback if Log_Return not created
+        target_col = 'Close'
+    
     target_col_idx = feature_cols.index(target_col)
     
-    # 2. Scale Data
-    scaler = StockScaler()
+    # 4. Scaling
+    # Use StandardScaler for better convergence with Transformers
+    scaler = StockScaler(scaler_type='standard')
     df_scaled = scaler.fit_transform(df, feature_cols)
-    scaled_data = df_scaled[feature_cols].values
+    data_scaled = df_scaled[feature_cols].values
     
-    # 3. Prepare LSTM Data
-    X, y = create_sequences(scaled_data, settings.SEQ_LENGTH, target_col_idx)
+    # 5. Create Sequences (Multi-step)
+    X, y = create_sequences(
+        data_scaled, 
+        settings.SEQ_LENGTH, 
+        settings.FORECAST_HORIZON, 
+        target_col_idx
+    )
     
-    # Check if we have enough data
-    if len(X) == 0:
-        logger.warning(f"Not enough data for {ticker} to create sequences.")
-        return f"Insufficient data for {ticker}"
-
-    # Train/Test Split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=settings.TEST_SIZE, shuffle=False)
+    # Reshape y to (samples, horizon, 1) if it's (samples, horizon)
+    if len(y.shape) == 2:
+        y = y[..., np.newaxis]
+        
+    # 6. Train/Val Split (Time-based, No Shuffle)
+    train_size = int(len(X) * (1 - settings.TEST_SIZE))
+    X_train, X_val = X[:train_size], X[train_size:]
+    y_train, y_val = y[:train_size], y[train_size:]
     
     # Convert to Tensor
-    X_train_tensor = torch.FloatTensor(X_train)
-    y_train_tensor = torch.FloatTensor(y_train).unsqueeze(1)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    # 4. Train LSTM
+    X_train_t = torch.FloatTensor(X_train).to(device)
+    y_train_t = torch.FloatTensor(y_train).to(device)
+    X_val_t = torch.FloatTensor(X_val).to(device)
+    y_val_t = torch.FloatTensor(y_val).to(device)
+    
+    # Dataloaders
+    train_dataset = TensorDataset(X_train_t, y_train_t)
+    val_dataset = TensorDataset(X_val_t, y_val_t)
+    
+    train_loader = DataLoader(train_dataset, batch_size=settings.BATCH_SIZE, shuffle=False) # Shuffle=False for time series? Actually shuffle=True is fine for training batches, but val should be sequential. Transformers handle Order via PE.
+    # Ideally shuffle training windows to break correlation between batches? Yes.
+    train_loader = DataLoader(train_dataset, batch_size=settings.BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=settings.BATCH_SIZE, shuffle=False)
+    
+    # 7. Model Initialization
     input_dim = X.shape[2]
-    hidden_dim = 64
-    lstm_model = LSTMAttentionModel(input_dim=input_dim, hidden_dim=hidden_dim)
+    output_dim = 1 # Predicting 1 variable (Log_Return)
+    
+    model = TimeSeriesTransformer(
+        input_dim=input_dim,
+        d_model=64,
+        nhead=settings.NHEAD,
+        num_layers=settings.NUM_LAYERS,
+        dropout=settings.DROPOUT,
+        output_dim=output_dim,
+        forecast_horizon=settings.FORECAST_HORIZON
+    ).to(device)
+    
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(lstm_model.parameters(), lr=settings.LEARNING_RATE)
+    optimizer = optim.Adam(model.parameters(), lr=settings.LEARNING_RATE)
     
-    logger.info(f"Training LSTM for {ticker}...")
+    # Scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+    
+    # Early Stopping
+    checkpoint_path = os.path.join(settings.MODEL_DIR, f"transformer_{ticker}.pth")
+    early_stopping = EarlyStopping(patience=10, verbose=True, path=checkpoint_path)
+    
+    # 8. Training Loop
+    logger.info(f"Training on {device}...")
+    
     for epoch in range(settings.EPOCHS):
-        lstm_model.train()
-        optimizer.zero_grad()
-        output = lstm_model(X_train_tensor)
-        loss = criterion(output, y_train_tensor)
-        loss.backward()
-        optimizer.step()
+        model.train()
+        train_loss = 0.0
         
-        if (epoch + 1) % 10 == 0:
-            logger.info(f"Epoch {epoch+1}/{settings.EPOCHS}, Loss: {loss.item():.6f}")
+        for batch_X, batch_y in train_loader:
+            optimizer.zero_grad()
+            output = model(batch_X) # (batch, horizon, 1)
+            loss = criterion(output, batch_y)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
             
-    # Save LSTM Model
-    torch.save(lstm_model.state_dict(), os.path.join(settings.MODEL_DIR, f"lstm_attention_{ticker}.pth"))
+        train_loss /= len(train_loader)
+        
+        # Validation
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for batch_X, batch_y in val_loader:
+                output = model(batch_X)
+                loss = criterion(output, batch_y)
+                val_loss += loss.item()
+        
+        val_loss /= len(val_loader)
+        
+        logger.info(f"Epoch {epoch+1}/{settings.EPOCHS} - Train Loss: {train_loss:.6f} - Val Loss: {val_loss:.6f}")
+        
+        # Step Scheduler
+        scheduler.step(val_loss)
+        
+        # Check Early Stopping
+        early_stopping(val_loss, model)
+        if early_stopping.early_stop:
+            logger.info("Early stopping triggered.")
+            break
+            
+    # Save Scaler and Metadata
     scaler.save(f"scaler_{ticker}.pkl")
-    logger.info(f"LSTM Model and Scaler saved for {ticker}.")
-
-    # Save LSTM Model
-    torch.save(lstm_model.state_dict(), os.path.join(settings.MODEL_DIR, f"lstm_attention_{ticker}.pth"))
-    scaler.save(f"scaler_{ticker}.pkl")
-    logger.info(f"LSTM Model and Scaler saved for {ticker}.")
-
-    # --- MODEL FUSION START ---
-    
-    # 5. Extract LSTM Features (The "Fusion" Step)
-    lstm_model.eval()
-    with torch.no_grad():
-        # Get predictions for the entire X dataset (Train + Test)
-        # Convert X to tensor
-        X_tensor = torch.FloatTensor(X)
-        lstm_preds = lstm_model(X_tensor).numpy() # Shape: (len(X), 1)
-        
-    # 6. Add External Data (News & Macro)
-    from backend.features.external_data import ExternalDataSimulator
-    
-    # We need to align external data with the sequences
-    # X contains data from index [0...seq_len] to [N...N+seq_len]
-    # The target y is at [seq_length...N+seq_length]
-    # We want features corresponding to the prediction time `t`?
-    # Actually, XGBoost tries to predict "Signal" at time `t` based on features at `t`.
-    # LSTM prediction at `t` is based on `t-seq_len` to `t`.
-    # So `lstm_preds[i]` corresponds to the prediction made using sequence `i`.
-    # Sequence `i` ends at index `i + seq_length - 1`. The prediction is for `i + seq_length`.
-    
-    # Let's enrich the original `df_scaled` (or rather a subset of it) with External Data first.
-    # Actually, generating random data for the `trimmed` dataset `X` is easier.
-    
-    # Generate Mock Data matching the length of X
-    # In reality, you'd match dates. Here we just generate N samples.
-    n_samples = len(X)
-    sentiments = np.random.uniform(-1.0, 1.0, size=(n_samples, 1))
-    macros = np.random.uniform(40, 80, size=(n_samples, 1))
-    
-    # Fuse Features: [Original_Last_Step_Features, LSTM_Prediction, Sentiment, Macro]
-    # X shape: (samples, seq_len, features)
-    # We take the last time step of the input sequence as the "current state" for XGBoost
-    # X_last_step = X[:, -1, :] # Shape: (samples, features)
-    
-    # Wait, in original code:
-    # X_xgb = df_scaled[feature_cols].iloc[:-5].values 
-    # original code aligned XGBoost features with Labels.
-    # labels = prepare_labels(df) (which generates labels for t using t+5)
-    
-    # Let's align correctly.
-    # LSTM X, y were created from `scaled_data`.
-    # `y` in LSTM is `Log_Return` at `t+1`.
-    
-    # For XGBoost, we want to predict `Label` (Buy/Sell/Hold) at `t`, using info available at `t`.
-    # Info available at `t`:
-    # 1. Technical Indicators at `t` (from df)
-    # 2. LSTM Prediction for `t+1` made at `t` (using history `t-seq`...`t`)
-    # 3. Sentiment/Macro at `t`
-    
-    # `lstm_preds` are exactly #2.
-    # `X` (LSTM input) corresponds to windows ending at `t`.
-    # So `lstm_preds[i]` is the prediction made at `t`, using data ending at `t`.
-    
-    # We need to recreate `X_xgb` to match `lstm_preds` length.
-    # LSTM `create_sequences` consumed `seq_length` rows.
-    # So `lstm_preds` has length `len(df) - seq_length`.
-    # `labels` generation usually drops the last `horizon` rows.
-    
-    # Let's rebuild the fusion dataset carefully.
-    
-    # 1. Base Features (from X last step?) OR from df directly?
-    # Using df directly is safer for indices.
-    # df_scaled len: N.
-    # LSTM preds len: N - seq_length. Start index in df: seq_length.
-    
-    valid_indices_start = settings.SEQ_LENGTH
-    
-    # XGBoost Labels horizon
-    horizon = 5
-    # We lose last `horizon` rows for labels.
-    valid_indices_end = len(df_scaled) - horizon
-    
-    # Intersection of valid ranges:
-    # Start: SEQ_LENGTH
-    # End: len(df) - horizon
-    
-    # Slice LSTM Preds
-    # lstm_preds start at `seq_length`.
-    # We need to drop the last `horizon` predictions to match labels.
-    lstm_preds_trimmed = lstm_preds[:-horizon]
-    
-    # Slice External Data
-    # Generate for full length then slice? Or generate for specific len?
-    # Simulating for full `df` is cleaner.
-    df_enriched = ExternalDataSimulator.add_external_features(df, ticker)
-    # Extract columns
-    sentiments_full = df_enriched['Sentiment'].values
-    macros_full = df_enriched['Macro_Score'].values
-    
-    # Slice Features to match [SEQ_LENGTH : -horizon]
-    # We need features at time `t`.
-    X_xgb_base = df_scaled[feature_cols].iloc[valid_indices_start : -horizon].values
-    sentiment_slice = sentiments_full[valid_indices_start : -horizon].reshape(-1, 1)
-    macro_slice = macros_full[valid_indices_start : -horizon].reshape(-1, 1)
-    
-    # Labels
-    xg_model = XGBoostFusionModel()
-    all_labels = xg_model.prepare_labels(df, horizon=horizon) 
-    # all_labels len = len(df) - horizon. 
-    # We need to slice off the first `SEQ_LENGTH` to match our start.
-    y_xgb = all_labels[valid_indices_start:]
-    
-    # Concatenate All Features
-    # 1. Base Technicals
-    # 2. LSTM Prediction (Future Insight)
-    # 3. Sentiment
-    # 4. Macro
-    X_fused = np.hstack([X_xgb_base, lstm_preds_trimmed, sentiment_slice, macro_slice])
-    
-    # Scale External Features? 
-    # XGBoost handles unscaled fine, but for consistency maybe? 
-    # Sentiment is -1 to 1 (fine). Macro 40-80 (fine).
-    # LSTM pred is scaled (fine).
-    
-    if len(X_fused) > 0:
-        # Split - DISABLE SHUFFLE
-        X_xgb_train, X_xgb_test, y_xgb_train, y_xgb_test = train_test_split(X_fused, y_xgb, test_size=settings.TEST_SIZE, shuffle=False)
-        
-        # Use Test set for Early Stopping
-        eval_set = [(X_xgb_train, y_xgb_train), (X_xgb_test, y_xgb_test)]
-        
-        xg_model.train(X_xgb_train, y_xgb_train, eval_set=eval_set)
-        xg_model.save(f"xgboost_fusion_{ticker}.pkl")
-    else:
-        logger.warning(f"Not enough data for XGBoost Fusion for {ticker}")
-    
-    return f"Training Completed Successfully for {ticker}"
+    logger.info(f"Training completed for {ticker}.")
 
 if __name__ == "__main__":
-    # Train for all CSV files in the data directory
     csv_files = glob.glob(os.path.join(settings.DATA_DIR, "*.csv"))
-    
     if not csv_files:
-        logger.warning("No CSV files found in data directory.")
+        logger.warning(f"No CSV files found in {settings.DATA_DIR}")
     
     for file_path in csv_files:
-        # Skip sample.csv if we strictly want real data, but let's process it if it exists 
-        # unless it is explicitly unwanted. Given user prompt, they replaced it, 
-        # but if it exists we can just train on it too or skip it.
-        # I'll process whatever is there.
-        try:
-            result = train_pipeline(file_path)
-            print(result)
-        except Exception as e:
-            logger.error(f"Failed to train on {file_path}: {e}")
+        train_pipeline(file_path)
