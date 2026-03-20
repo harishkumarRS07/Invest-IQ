@@ -107,7 +107,7 @@ class Predictor:
         market_df = ExternalDataSimulator.fetch_market_index(start_date=df.index[0], end_date=df.index[-1])
         df = add_technical_indicators(df)
         df = add_market_correlation(df, market_df)
-        df = ExternalDataSimulator.add_external_features(df, ticker)
+        df = ExternalDataSimulator.add_external_features(df, ticker, deterministic=True)
         
         # Select features
         # Ensure we have enough data
@@ -181,18 +181,34 @@ class Predictor:
         
         pct_change = (next_day_price - current_price) / current_price
         
-        # Logic for Signal (same as before)
-        if pct_change >= 0.02:
+        # Logic for Signal (Lowered threshold for realistic daily predictions)
+        # Daily index movements are relatively small. A 0.5% signal is significant.
+        if pct_change >= 0.005:
             signal = "BUY"
-        elif pct_change <= -0.02:
+        elif pct_change <= -0.005:
             signal = "SELL"
         else:
             signal = "HOLD"
             
-        # Confidence logic (heuristic since Transformer doesn't give std dev like MC Dropout unless we enable it)
-        # We can enable dropout during inference for uncertainty estimation if desired.
-        # For now, return generic high confidence if data is good.
-        confidence = 0.85 
+        # Confidence logic (Dynamic heuristics based on prediction magnitude)
+        # A stronger directional push maps to higher signal confidence
+        base_conf = 0.55
+        magnitude_conf = min(abs(pct_change) * 15, 0.40) # cap bonus at 40%
+        confidence = round(base_conf + magnitude_conf, 4)
+        
+        # Extract technical indicators from the last row
+        last_row = df.iloc[-1]
+        indicators = {
+            "rsi": float(last_row.get('RSI', 0)),
+            "macd": float(last_row.get('MACD', 0)),
+            "macd_signal": float(last_row.get('MACD_Signal', 0)),
+            "sma_20": float(last_row.get('SMA_20', 0)),
+            "sma_50": float(last_row.get('SMA_50', 0)),
+            "bb_high": float(last_row.get('BB_High', 0)),
+            "bb_low": float(last_row.get('BB_Low', 0)),
+            "vwap": float(last_row.get('VWAP', 0)),
+            "atr": float(last_row.get('ATR', 0))
+        }
         
         return {
             "current_price": current_price,
@@ -201,7 +217,8 @@ class Predictor:
             "signal": signal,
             "signal_confidence": confidence,
             "risk_level": "Medium", # Placeholder or implement logic
-            "reason": f"Model predicts {pct_change:.2%} return for next day."
+            "reason": f"Model predicts {pct_change:.2%} return for next day.",
+            "indicators": indicators
         }
 
 if __name__ == "__main__":

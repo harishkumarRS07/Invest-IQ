@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+from typing import cast
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -14,7 +15,8 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        return x + self.pe[:x.size(0), :]
+        pe = cast(torch.Tensor, self.pe)
+        return x + pe[:x.size(0), :]
 
 class TimeSeriesTransformer(nn.Module):
     """
@@ -66,13 +68,7 @@ class TimeSeriesTransformer(nn.Module):
         """
         # Embed and add position encoding
         src = self.input_embedding(src) * math.sqrt(self.d_model)
-        src = self.pos_encoder(src.permute(1, 0, 2)).permute(1, 0, 2) # PE expects (L, N, E) but we work with batch_first=True in Transformer?
-        # Check PE implementation: it returns (L, 1, E). 
-        # If we permute src to (L, N, E), add PE, then permute back to (N, L, E).
-        
-        # Correction: My PE implementation is standard PyTorch tutorial which outputs (L, N, E).
-        # TransformerEncoder with batch_first=True expects (N, L, E).
-        # So:
+        # PE expects (L, N, E) format
         src = src.permute(1, 0, 2) # (L, N, E)
         src = self.pos_encoder(src)
         src = src.permute(1, 0, 2) # (N, L, E)

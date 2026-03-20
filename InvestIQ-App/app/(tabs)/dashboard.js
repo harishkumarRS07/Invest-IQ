@@ -1,8 +1,17 @@
 /**
- * Dashboard Screen – AI Signals Feed
- * Fetches batch signals, displays in FlatList with pull-to-refresh and skeleton.
+ * Dashboard Screen – AI Signals Feed (Optimized)
+ *
+ * Performance improvements:
+ *  - Debounced ticker search (300ms) via useDebounce → avoids filtering on
+ *    every keystroke
+ *  - useMemo for filtered list and pulse bar counts → computed only when
+ *    inputs change, not on every render
+ *  - useCallback for renderItem, keyExtractor, filter chip handlers, logout
+ *  - FlatList virtualization: initialNumToRender, maxToRenderPerBatch,
+ *    windowSize, updateCellsBatchingPeriod, removeClippedSubviews
+ *  - PulseItem extracted and memoized with React.memo
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
     View, Text, FlatList, RefreshControl, StyleSheet,
     TextInput, TouchableOpacity, Platform,
@@ -10,6 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useStockSignals } from '../../src/hooks/useStockData';
+import { useDebounce } from '../../src/hooks/useDebounce';
 import StockSignalCard from '../../src/components/StockSignalCard';
 import {
     LoadingSkeleton, ErrorBanner, EmptyState, SectionHeader,
@@ -29,6 +39,22 @@ const TICKER_TO_NAME = {
     ICICIBANK: 'ICICI Bank',
 };
 
+function getGreeting() {
+    const h = new Date().getHours();
+    if (h < 12) return 'Morning';
+    if (h < 17) return 'Afternoon';
+    return 'Evening';
+}
+
+// ── Memoized sub-component ────────────────────────────────────────────────────
+const PulseItem = React.memo(({ label, value, valueColor, styles }) => (
+    <View style={styles.pulseItem}>
+        <Text style={styles.pulseLabel}>{label}</Text>
+        <Text style={[styles.pulseValue, valueColor && { color: valueColor }]}>{value}</Text>
+    </View>
+));
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 export default function DashboardScreen() {
     const { user, logout } = useAuth();
     const { signals, loading, refreshing, error, refresh } = useStockSignals(ALL_TICKERS);
@@ -38,18 +64,66 @@ export default function DashboardScreen() {
     const C = useColors();
     const styles = useMemo(() => makeStyles(C), [C]);
 
-    const filtered = signals
-        .filter((s) => filter === 'All' || s.signal === filter)
-        .filter((s) => {
-            const q = search.toLowerCase().trim();
-            if (!q) return true;
-            const ticker = s.symbol.toLowerCase();
-            const name = (TICKER_TO_NAME[s.symbol] || '').toLowerCase();
-            return ticker.includes(q) || name.includes(q);
+    // Debounce search input: filtering only recalculates 300ms after user stops typing
+    const debouncedSearch = useDebounce(search, 300);
+
+    // Memoized pulse counts – avoids re-computing on every render tick
+    const pulseCounts = useMemo(() => ({
+        total: signals.length,
+        buy: signals.filter((s) => s.signal === 'BUY').length,
+        sell: signals.filter((s) => s.signal === 'SELL').length,
+        hold: signals.filter((s) => s.signal === 'HOLD').length,
+    }), [signals]);
+
+    // Memoized filtered list – only recomputed when signals/filter/debouncedSearch change
+    const filtered = useMemo(() => {
+        const q = debouncedSearch.toLowerCase().trim();
+        return signals.filter((s) => {
+            // Signal filter
+            if (filter !== 'All' && s.signal !== filter) return false;
+            // Search filter
+            if (q) {
+                const ticker = s.symbol.toLowerCase();
+                const name = (TICKER_TO_NAME[s.symbol] || '').toLowerCase();
+                if (!ticker.includes(q) && !name.includes(q)) return false;
+            }
+            return true;
         });
+    }, [signals, filter, debouncedSearch]);
 
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+    // Stable callbacks
+    const renderItem = useCallback(
+        ({ item, index }) => <StockSignalCard item={item} index={index} />,
+        []
+    );
+    const keyExtractor = useCallback((item) => item.symbol, []);
+    const handleClearSearch = useCallback(() => setSearch(''), []);
+    const handleLogout = useCallback(() => logout(), [logout]);
+    const handleRefresh = useCallback(() => refresh(), [refresh]);
+
+    // Memoized filter chip handlers (one per chip, stable across renders)
+    const filterHandlers = useMemo(
+        () => Object.fromEntries(FILTERS.map((f) => [f, () => setFilter(f)])),
+        []
+    );
+
+    const listHeader = useMemo(() => (
+        <>
+            {error && <ErrorBanner message={error} onRetry={refresh} />}
+            <SectionHeader title="AI Trade Signals" action="Refresh" onAction={refresh} />
+        </>
+    ), [error, refresh]);
+
+    const listEmpty = useMemo(() => (
+        <EmptyState
+            emoji="🔍"
+            title={filter === 'All' ? 'No signals yet' : `No ${filter} signals`}
+            subtitle={filter === 'All' ? 'Pull down to refresh' : 'Try a different filter or pull down to refresh'}
+        />
+    ), [filter]);
 
     return (
         <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -61,24 +135,28 @@ export default function DashboardScreen() {
                 </View>
                 <View style={styles.headerRight}>
                     <Text style={styles.time}>{timeStr}</Text>
-                    <TouchableOpacity style={styles.logoutBtn} onPress={logout} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <TouchableOpacity
+                        style={styles.logoutBtn}
+                        onPress={handleLogout}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
                         <Text style={styles.logoutIcon}>⏻</Text>
                     </TouchableOpacity>
                 </View>
             </View>
 
-            {/* Market pulse bar */}
+            {/* Market pulse bar – uses memoized counts */}
             <View style={styles.pulseBar}>
-                <PulseItem label="Signals" value={signals.length} styles={styles} />
+                <PulseItem label="Signals" value={pulseCounts.total} styles={styles} />
                 <View style={styles.pulseDivider} />
-                <PulseItem label="BUY" value={signals.filter((s) => s.signal === 'BUY').length} valueColor={C.signal.buy} styles={styles} />
+                <PulseItem label="BUY" value={pulseCounts.buy} valueColor={C.signal.buy} styles={styles} />
                 <View style={styles.pulseDivider} />
-                <PulseItem label="SELL" value={signals.filter((s) => s.signal === 'SELL').length} valueColor={C.signal.sell} styles={styles} />
+                <PulseItem label="SELL" value={pulseCounts.sell} valueColor={C.signal.sell} styles={styles} />
                 <View style={styles.pulseDivider} />
-                <PulseItem label="HOLD" value={signals.filter((s) => s.signal === 'HOLD').length} valueColor={C.signal.hold} styles={styles} />
+                <PulseItem label="HOLD" value={pulseCounts.hold} valueColor={C.signal.hold} styles={styles} />
             </View>
 
-            {/* Search */}
+            {/* Search – debounced */}
             <View style={styles.searchRow}>
                 <Text style={styles.searchIcon}>🔍</Text>
                 <TextInput
@@ -91,7 +169,7 @@ export default function DashboardScreen() {
                     autoCorrect={false}
                 />
                 {search.length > 0 && (
-                    <TouchableOpacity onPress={() => setSearch('')}>
+                    <TouchableOpacity onPress={handleClearSearch}>
                         <Text style={styles.clearIcon}>✕</Text>
                     </TouchableOpacity>
                 )}
@@ -103,76 +181,55 @@ export default function DashboardScreen() {
                     <TouchableOpacity
                         key={f}
                         style={[styles.chip, filter === f && styles.chipActive]}
-                        onPress={() => setFilter(f)}
+                        onPress={filterHandlers[f]}
                     >
                         <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>{f}</Text>
                     </TouchableOpacity>
                 ))}
             </View>
 
-            {/* Loading */}
+            {/* Content */}
             {loading ? (
                 <View style={styles.spinnerContainer}>
                     <LoadingSkeleton label="Fetching AI signals…" />
                 </View>
             ) : error && signals.length === 0 ? (
-                /* Full-screen error when nothing loaded at all */
                 <View style={styles.errorFull}>
                     <Text style={styles.errorEmoji}>⚠️</Text>
                     <Text style={styles.errorTitle}>Could not load signals</Text>
                     <Text style={styles.errorMsg}>{error}</Text>
-                    <TouchableOpacity style={styles.retryBtn} onPress={refresh}>
+                    <TouchableOpacity style={styles.retryBtn} onPress={handleRefresh}>
                         <Text style={styles.retryText}>Try Again</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
                 <FlatList
                     data={filtered}
-                    keyExtractor={(item) => item.symbol}
-                    renderItem={({ item, index }) => <StockSignalCard item={item} index={index} />}
-                    contentContainerStyle={styles.listPad}
-                    ListEmptyComponent={
-                        <EmptyState
-                            emoji="🔍"
-                            title={filter === 'All' ? 'No signals yet' : `No ${filter} signals`}
-                            subtitle={filter === 'All' ? 'Pull down to refresh' : 'Try a different filter or pull down to refresh'}
-                        />
-                    }
-                    ListHeaderComponent={
-                        <>
-                            {error && <ErrorBanner message={error} onRetry={refresh} />}
-                            <SectionHeader title="AI Trade Signals" action="Refresh" onAction={refresh} />
-                        </>
-                    }
+                    keyExtractor={keyExtractor}
+                    renderItem={renderItem}
+                    contentContainerStyle={[styles.listPad, { paddingBottom: insets.bottom + Spacing.xxl }]}
+                    ListEmptyComponent={listEmpty}
+                    ListHeaderComponent={listHeader}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
-                            onRefresh={refresh}
+                            onRefresh={handleRefresh}
                             tintColor={C.brand.purple}
                             colors={[C.brand.purple]}
                         />
                     }
                     showsVerticalScrollIndicator={false}
+                    // ── Virtualization tuning ──────────────────────────────
+                    initialNumToRender={5}
+                    maxToRenderPerBatch={8}
+                    updateCellsBatchingPeriod={50}
+                    windowSize={10}
+                    removeClippedSubviews={Platform.OS === 'android'}
+                // ─────────────────────────────────────────────────────
                 />
             )}
         </View>
     );
-}
-
-function PulseItem({ label, value, valueColor, styles }) {
-    return (
-        <View style={styles.pulseItem}>
-            <Text style={styles.pulseLabel}>{label}</Text>
-            <Text style={[styles.pulseValue, valueColor && { color: valueColor }]}>{value}</Text>
-        </View>
-    );
-}
-
-function getGreeting() {
-    const h = new Date().getHours();
-    if (h < 12) return 'Morning';
-    if (h < 17) return 'Afternoon';
-    return 'Evening';
 }
 
 const makeStyles = (C) => StyleSheet.create({

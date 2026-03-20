@@ -159,8 +159,37 @@ export function LoadingSpinner({ label = 'Loading signals…', size = 80 }) {
     );
 }
 
-// Legacy alias – keeps existing usages working
-export function LoadingSkeleton({ label } = {}) {
+// ─── LoadingSkeleton ─────────────────────────────────────────────────────────
+// Renders shimmer placeholder rows when `rows` is specified, or falls back
+// to the spinner when only a `label` is provided.
+export function LoadingSkeleton({ label, rows } = {}) {
+    const C = useColors();
+    if (rows && rows > 0) {
+        return (
+            <View style={{ paddingHorizontal: Spacing.lg, paddingTop: Spacing.md }}>
+                {Array.from({ length: rows }).map((_, i) => (
+                    <View
+                        key={i}
+                        style={[
+                            styles.skeletonRow,
+                            {
+                                backgroundColor: C.bg.elevated,
+                                borderColor: C.border.default,
+                                // Alternate widths for natural feel
+                                marginBottom: Spacing.sm,
+                            },
+                        ]}
+                    >
+                        <View style={[styles.skeletonCircle, { backgroundColor: C.bg.card }]} />
+                        <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                            <View style={[styles.skeletonLine, { backgroundColor: C.bg.card, width: '70%' }]} />
+                            <View style={[styles.skeletonLine, { backgroundColor: C.bg.card, width: '45%', marginTop: 8 }]} />
+                        </View>
+                    </View>
+                ))}
+            </View>
+        );
+    }
     return <LoadingSpinner label={label} />;
 }
 
@@ -282,6 +311,7 @@ const styles = StyleSheet.create({
         color: Colors.brand.purple,
         fontSize: Typography.sizes.md,
         fontWeight: Typography.weights.semibold,
+        textAlign: 'center',
     },
     // spinner
     spinnerWrap: {
@@ -309,6 +339,25 @@ const styles = StyleSheet.create({
         fontWeight: Typography.weights.medium,
         letterSpacing: 0.3,
         marginTop: Spacing.sm,
+    },
+    // skeleton rows
+    skeletonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: Spacing.md,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        height: 72,
+    },
+    skeletonCircle: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        flexShrink: 0,
+    },
+    skeletonLine: {
+        height: 12,
+        borderRadius: Radius.sm,
     },
     empty: {
         alignItems: 'center',

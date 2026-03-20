@@ -110,7 +110,7 @@ export default function PortfolioScreen() {
     return (
         <View style={[styles.root, { paddingTop: insets.top }]}>
             <ScrollView
-                contentContainerStyle={styles.scroll}
+                contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + Spacing.xxl }]}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
@@ -135,28 +135,37 @@ export default function PortfolioScreen() {
                     <>
                         {/* ── Pie Chart ──────────────────────────────────── */}
                         {pieData.length > 0 && (
-                            <Card>
+                            <Card style={styles.chartCardWrapper}>
                                 <SectionHeader title="Optimal Allocation" />
-                                <PieChart
-                                    data={pieData}
-                                    width={chartWidth}
-                                    height={220}
-                                    chartConfig={{
-                                        // color must return a plain rgba/hex string
-                                        color: (opacity = 1) =>
-                                            `rgba(123, 97, 255, ${opacity})`,
-                                        labelColor: (opacity = 1) =>
-                                            C.text.secondary,
-                                        backgroundColor: 'transparent',
-                                        backgroundGradientFrom: C.bg.primary,
-                                        backgroundGradientTo: C.bg.primary,
-                                    }}
-                                    accessor="population"
-                                    backgroundColor="transparent"
-                                    paddingLeft="10"
-                                    absolute={false}
-                                    hasLegend={true}
-                                />
+                                <View style={styles.chartRow}>
+                                    <View style={styles.pieWrapper}>
+                                        <PieChart
+                                            data={pieData}
+                                            width={160} // Just large enough for the pie
+                                            height={160}
+                                            chartConfig={{
+                                                color: (opacity = 1) => `rgba(123, 97, 255, ${opacity})`,
+                                            }}
+                                            accessor="population"
+                                            backgroundColor="transparent"
+                                            paddingLeft={35} // center to fit bounding box
+                                            center={[0, 0]}
+                                            absolute={false}
+                                            hasLegend={false}
+                                        />
+                                    </View>
+
+                                    <View style={styles.legendContainer}>
+                                        {pieData.map((item, idx) => (
+                                            <View key={item.name} style={styles.legendItem}>
+                                                <View style={[styles.legendColor, { backgroundColor: item.color }]} />
+                                                <Text style={styles.legendText} numberOfLines={1}>
+                                                    {Math.round(item.population)}% {item.name}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
                             </Card>
                         )}
 
@@ -215,7 +224,7 @@ export default function PortfolioScreen() {
                         {/* ── Disclaimer ─────────────────────────────────── */}
                         <View style={styles.disclaimer}>
                             <Text style={styles.disclaimerText}>
-                                ⚠️ AI-generated allocation for educational purposes only. Not financial advice.
+                                ⚠️ AI-generated allocation for financial advice.
                             </Text>
                         </View>
                     </>
@@ -238,6 +247,45 @@ const makeStyles = (C) => StyleSheet.create({
         color: C.text.secondary,
         fontSize: Typography.sizes.md,
         marginTop: 4,
+    },
+
+    chartCardWrapper: {
+        overflow: 'hidden',
+    },
+    chartRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: Spacing.sm,
+    },
+    pieWrapper: {
+        width: 160,
+        height: 160,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: -10, // Slight shift to make layout breathe better
+    },
+    legendContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        marginLeft: Spacing.lg,
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    legendColor: {
+        width: 14,
+        height: 14,
+        borderRadius: Radius.full,
+        marginRight: 8,
+    },
+    legendText: {
+        color: C.text.secondary,
+        fontSize: Typography.sizes.sm,
+        fontWeight: Typography.weights.medium,
+        flexShrink: 1, // Prevent long text from blowing out the bounds
     },
 
     /* Allocation bar row */

@@ -11,6 +11,14 @@ def setup_logger(name: str = "stock_predictor"):
     logger.setLevel(logging.INFO)
     
     if not logger.handlers:
+        # Prevent UnicodeEncodeError on Windows consoles using cp1252.
+        reconfigure = getattr(sys.stdout, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(errors="replace")
+            except Exception:
+                pass
+
         # Console Handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)

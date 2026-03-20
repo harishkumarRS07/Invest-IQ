@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import List, Dict
+from typing import List, Dict, Any
 from backend.core.logging import logger
 
 class StackingEnsemble:

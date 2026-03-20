@@ -1,6 +1,7 @@
 
 import yfinance as yf
 from textblob import TextBlob
+from typing import Any
 import sys
 import subprocess
 
@@ -47,7 +48,8 @@ def get_real_sentiment(ticker_symbol):
             
             # Analyze Sentiment
             analysis = TextBlob(title)
-            sentiment = analysis.sentiment.polarity
+            sentiment_obj: Any = getattr(analysis, 'sentiment', None)
+            sentiment = float(getattr(sentiment_obj, 'polarity', 0.0))
             total_sentiment += sentiment
             count += 1
             

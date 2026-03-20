@@ -115,8 +115,8 @@ def calculate_accuracy():
             # Slice External
             from backend.features.external_data import ExternalDataSimulator
             df_enriched = ExternalDataSimulator.add_external_features(df, ticker)
-            sentiments = df_enriched['Sentiment'].values[valid_start : valid_end].reshape(-1, 1)
-            macros = df_enriched['Macro_Score'].values[valid_start : valid_end].reshape(-1, 1)
+            sentiments = np.asarray(df_enriched['Sentiment'].values[valid_start : valid_end]).reshape(-1, 1)
+            macros = np.asarray(df_enriched['Macro_Score'].values[valid_start : valid_end]).reshape(-1, 1)
             
             # Fuse
             X_fused = np.hstack([X_xgb_base, lstm_preds_trimmed, sentiments, macros])

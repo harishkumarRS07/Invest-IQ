@@ -1,6 +1,10 @@
 import pandas as pd
 import numpy as np
-import ta
+from typing import Optional
+from ta.momentum import rsi
+from ta.trend import MACD, sma_indicator
+from ta.volatility import AverageTrueRange, BollingerBands
+from ta.volume import volume_weighted_average_price
 from backend.core.logging import logger
 
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -15,31 +19,31 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         
         # Moving Averages
-        df['SMA_20'] = ta.trend.sma_indicator(df['Close'], window=20)
-        df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
+        df['SMA_20'] = sma_indicator(df['Close'], window=20)
+        df['SMA_50'] = sma_indicator(df['Close'], window=50)
         
         # RSI
-        df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
+        df['RSI'] = rsi(df['Close'], window=14)
         
         # Bollinger Bands
-        indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
+        indicator_bb = BollingerBands(close=df['Close'], window=20, window_dev=2)
         df['BB_High'] = indicator_bb.bollinger_hband()
         df['BB_Low'] = indicator_bb.bollinger_lband()
         
         # VWAP
         # ta library VWAP requires High, Low, Close, Volume
-        df['VWAP'] = ta.volume.volume_weighted_average_price(
+        df['VWAP'] = volume_weighted_average_price(
             high=df['High'], low=df['Low'], close=df['Close'], volume=df['Volume'], window=14
         )
 
         # MACD
-        macd = ta.trend.MACD(close=df['Close'], window_slow=26, window_fast=12, window_sign=9)
+        macd = MACD(close=df['Close'], window_slow=26, window_fast=12, window_sign=9)
         df['MACD'] = macd.macd()
         df['MACD_Signal'] = macd.macd_signal()
         df['MACD_Hist'] = macd.macd_diff()
 
         # ATR (Volatility)
-        atr = ta.volatility.AverageTrueRange(high=df['High'], low=df['Low'], close=df['Close'], window=14)
+        atr = AverageTrueRange(high=df['High'], low=df['Low'], close=df['Close'], window=14)
         df['ATR'] = atr.average_true_range()
 
         # Log Return (Target Variable)
@@ -65,7 +69,7 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
         logger.error(f"Error adding indicators: {e}")
         raise e
 
-def add_market_correlation(df: pd.DataFrame, market_df: pd.DataFrame, window: int = 50) -> pd.DataFrame:
+def add_market_correlation(df: pd.DataFrame, market_df: Optional[pd.DataFrame], window: int = 50) -> pd.DataFrame:
     """
     Add correlation with market index (e.g. NIFTY 50).
     Expects market_df to have datetime index and 'Close' column.
@@ -82,7 +86,9 @@ def add_market_correlation(df: pd.DataFrame, market_df: pd.DataFrame, window: in
         stock_returns = df['Log_Return']
         market_returns = np.log(market_df['Close'] / market_df['Close'].shift(1))
         
-        # Align series
+        # Align series - ensure market_returns is a Series
+        if not isinstance(market_returns, pd.Series):
+            market_returns = pd.Series(market_returns, index=market_df.index)
         aligned_market_returns = market_returns.reindex(stock_returns.index)
         
         # Calculate Rolling Correlation

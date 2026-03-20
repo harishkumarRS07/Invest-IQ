@@ -62,7 +62,7 @@ def _extract_indicators(df: pd.DataFrame) -> Indicators:
         atr=g("ATR"),
     )
 
-def _run_prediction(symbol: str, file_path: str = None):
+def _run_prediction(symbol: str, file_path: Optional[str] = None):
     """Run prediction and return a standardized dict."""
     path = file_path or os.path.join(settings.DATA_DIR, f"{symbol}.csv")
     if not os.path.exists(path):
@@ -109,7 +109,7 @@ def get_me(authorization: Optional[str] = Header(None)):
 def predict(request: PredictionRequest, authorization: Optional[str] = Header(None)):
     _require_auth(authorization)
     try:
-        result = _run_prediction(request.symbol, request.file_path)
+        result = _get_prediction_with_cache(request.symbol, file_path=request.file_path)
         pct = (result["predicted_price"] - result["current_price"]) / result["current_price"]
         explanation = _build_explanation(
             result["signal"], pct, result["signal_confidence"], result["risk_level"]
@@ -128,7 +128,7 @@ def predict(request: PredictionRequest, authorization: Optional[str] = Header(No
             signal=result["signal"],
             signal_confidence=result["signal_confidence"],
             risk_level=result["risk_level"],
-            indicators=result.get("_indicators", Indicators()),
+            indicators=Indicators(**result.get("indicators", {})),
             explanation=explanation,
         )
     except HTTPException:
@@ -143,8 +143,27 @@ def predict(request: PredictionRequest, authorization: Optional[str] = Header(No
 
 import time as _time
 
-_signals_cache: dict = {}       # symbol -> (timestamp, result_dict)
+_signals_cache: dict = {}       # cache_key -> (timestamp, result_dict)
 _CACHE_TTL = 600                # 10 minutes
+
+def _prediction_cache_key(symbol: str, file_path: Optional[str] = None) -> str:
+    normalized_symbol = symbol.strip().upper()
+    normalized_path = (file_path or "").strip().lower()
+    return f"{normalized_symbol}|{normalized_path}"
+
+def _get_prediction_with_cache(symbol: str, file_path: Optional[str] = None):
+    now = _time.time()
+    cache_key = _prediction_cache_key(symbol, file_path=file_path)
+    cached = _signals_cache.get(cache_key)
+
+    if cached and (now - cached[0]) < _CACHE_TTL:
+        logger.info(f"Cache hit for {symbol}")
+        return cached[1]
+
+    result = _run_prediction(symbol, file_path=file_path)
+    _signals_cache[cache_key] = (now, result)
+    logger.info(f"Cache miss - ran prediction for {symbol}")
+    return result
 
 @router.post("/signals/batch", response_model=BatchSignalResponse)
 def batch_signals(request: BatchSignalRequest, authorization: Optional[str] = Header(None)):
@@ -153,15 +172,7 @@ def batch_signals(request: BatchSignalRequest, authorization: Optional[str] = He
     signals = []
     for symbol in request.symbols:
         try:
-            now = _time.time()
-            cached = _signals_cache.get(symbol)
-            if cached and (now - cached[0]) < _CACHE_TTL:
-                result = cached[1]
-                logger.info(f"Cache hit for {symbol}")
-            else:
-                result = _run_prediction(symbol)
-                _signals_cache[symbol] = (now, result)
-                logger.info(f"Cache miss – ran prediction for {symbol}")
+            result = _get_prediction_with_cache(symbol)
 
             current = result["current_price"]
             predicted = result["predicted_price"]
@@ -177,7 +188,7 @@ def batch_signals(request: BatchSignalRequest, authorization: Optional[str] = He
                 signal_confidence=result["signal_confidence"],
                 risk_level=result["risk_level"],
                 pct_change=round(pct * 100, 2),
-                indicators=result.get("_indicators", Indicators()),
+                indicators=Indicators(**result.get("indicators", {})),
                 explanation=explanation,
             ))
         except Exception as e:
@@ -238,6 +249,56 @@ def analyze_sentiment(request: SentimentRequest, authorization: Optional[str] = 
         logger.error(f"Sentiment error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ─── News ───────────────────────────────────────────────────────────────────
+
+from backend.app.schemas import NewsResponse, NewsArticle
+from backend.features.external_data import ExternalDataSimulator
+
+@router.get("/news", response_model=NewsResponse)
+def get_news(ticker: str, authorization: Optional[str] = Header(None)):
+    """Fetch live news for a specific ticker."""
+    _require_auth(authorization)
+    try:
+        raw_news = ExternalDataSimulator.fetch_live_news(ticker)
+        
+        articles = []
+        if isinstance(raw_news, list):
+            for article in raw_news:
+                if not isinstance(article, dict):
+                    continue
+                    
+                content = article.get("content")
+                if not isinstance(content, dict):
+                    continue
+                    
+                # Analyze sentiment for the specific article title
+                title = content.get("title", "")
+                score = sentiment_analyzer.analyze(title) if title else 0.0
+                
+                label = "Neutral"
+                if score > 0.1: label = "Positive"
+                if score < -0.1: label = "Negative"
+                
+                pub_date = content.get("pubDate")
+                if pub_date is None:
+                    pub_date = ""
+
+                articles.append(NewsArticle(
+                    id=str(content.get("id", "")),
+                    title=str(title),
+                    publisher=str(content.get("provider", {}).get("displayName", "Unknown")),
+                    link=str(content.get("clickThroughUrl", {}).get("url", "") if isinstance(content.get("clickThroughUrl"), dict) else ""),
+                    providerPublishTime=pub_date,
+                    relatedTickers=content.get("relatedTickers", []) if isinstance(content.get("relatedTickers"), list) else [],
+                    sentiment_score=score,
+                    sentiment_label=label
+                ))
+        
+        return NewsResponse(symbol=ticker, articles=articles)
+    except Exception as e:
+        logger.error(f"News fetch error for {ticker}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ─── Portfolio ────────────────────────────────────────────────────────────────
 
 @router.post("/portfolio/optimize", response_model=PortfolioResponse)
@@ -252,8 +313,12 @@ def optimize_portfolio(request: PortfolioRequest, authorization: Optional[str] =
         if prices.empty:
             raise HTTPException(status_code=404, detail="No data found")
         allocation = portfolio_optimizer.optimize(prices)
-        weights = [allocation.get(s, 0) for s in prices.columns]
-        metrics = portfolio_optimizer.get_portfolio_metrics(weights, prices.pct_change().dropna())
+        # Extract weights in the exact same column order as the optimised allocation dict
+        alloc_symbols = list(allocation.keys())
+        weights = [allocation.get(s, 0.0) for s in alloc_symbols]
+        # Build returns DataFrame aligned to the allocation columns
+        aligned_returns = prices[[s for s in alloc_symbols if s in prices.columns]].pct_change().dropna()
+        metrics = portfolio_optimizer.get_portfolio_metrics(weights, aligned_returns)
         return PortfolioResponse(allocation=allocation, metrics=metrics)
     except Exception as e:
         logger.error(f"Portfolio error: {e}")

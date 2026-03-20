@@ -124,7 +124,7 @@ class PortfolioOptimizer:
             weights = mvo_weights
             logger.info("Using MVO weights (non-degenerate).")
         else:
-            logger.info("MVO degenerate or failed → using Inverse-Volatility weights.")
+            logger.info("MVO degenerate or failed -> using Inverse-Volatility weights.")
 
         if use_inv_vol:
             weights = self._inverse_vol_weights(returns)
@@ -158,7 +158,7 @@ class PortfolioOptimizer:
             if portfolio_volatility > 0 else 0.0
         )
 
-        daily_ret    = returns.dot(w)
+        daily_ret    = pd.Series(returns.to_numpy() @ w, index=returns.index)
         cumulative   = (1 + daily_ret).cumprod()
         rolling_max  = cumulative.cummax()
         drawdowns    = (cumulative - rolling_max) / rolling_max

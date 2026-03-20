@@ -12,7 +12,7 @@ except ImportError:
     TRANSFORMERS_AVAILABLE = False
 import torch
 from backend.core.logging import logger
-from typing import List, Dict, Union
+from typing import List, Dict, Union, cast
 import numpy as np
 
 class SentimentAnalyzer:
@@ -40,17 +40,24 @@ class SentimentAnalyzer:
         """
         if not text or not text.strip():
             return 0.0
+        
+        if not self.pipe or not self.tokenizer:
+            logger.warning("FinBERT not initialized, returning neutral score.")
+            return 0.0
             
         try:
             # Tokenize
             tokens = self.tokenizer(text, return_tensors='pt', truncation=False, padding=False)
-            input_ids = tokens['input_ids'][0]
+            input_ids = getattr(tokens, 'input_ids', None)
+            if input_ids is None or len(input_ids) == 0:
+                return 0.0
+            token_ids = cast(torch.Tensor, input_ids[0])
             
             # Chunking settings
             max_len = 512
             stride = 256
             
-            if len(input_ids) <= max_len:
+            if len(token_ids) <= max_len:
                 # Process normally
                 chunks = [text]
             else:
@@ -60,15 +67,15 @@ class SentimentAnalyzer:
                 # but valid inputs for pipeline are usually strings.
                 # So we will slide window over input_ids and decode back to string chunks.
                 chunks = []
-                for i in range(0, len(input_ids), stride):
-                    chunk_ids = input_ids[i : i + max_len]
+                for i in range(0, len(token_ids), stride):
+                    chunk_ids = token_ids[i : i + max_len]
                     if len(chunk_ids) < 10: # Skip very small chunks at the end
                         continue
                     # Skip special tokens if in middle? encode adds them. decode might not handle overlap perfectly if we split mid-sentence.
                     # Ideally we use stride on tokens.
                     chunk_text = self.tokenizer.decode(chunk_ids, skip_special_tokens=True)
                     chunks.append(chunk_text)
-                    if i + max_len >= len(input_ids):
+                    if i + max_len >= len(token_ids):
                          break
 
             # Predict on chunks
@@ -81,9 +88,10 @@ class SentimentAnalyzer:
             
             for chunk_res in results:
                 # chunk_res is list of dicts: [{'label': 'positive', 'score': X}, ...]
-                scores = {item['label']: item['score'] for item in chunk_res}
-                avg_pos += scores.get('positive', 0.0)
-                avg_neg += scores.get('negative', 0.0)
+                if isinstance(chunk_res, list) and len(chunk_res) > 0:
+                    scores = {item.get('label', ''): float(item.get('score', 0.0)) for item in chunk_res if isinstance(item, dict)}
+                    avg_pos += scores.get('positive', 0.0)
+                    avg_neg += scores.get('negative', 0.0)
             
             n_chunks = len(chunks)
             if n_chunks > 0:

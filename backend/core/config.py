@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     TEST_SIZE: float = 0.2
     
     # Training Params
-    EPOCHS: int = 5 # Reduced for demonstration (was 100)
+    EPOCHS: int = 100
     BATCH_SIZE: int = 32
     LEARNING_RATE: float = 0.001
     

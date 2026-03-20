@@ -4,18 +4,79 @@
  */
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
+import { API_BASE_URL, API_BASE_URL_CANDIDATES, REQUEST_TIMEOUT_MS, NETWORK_ERROR_MESSAGE } from '../../config/api';
 
-// ─── Config ─────────────────────────────────────────────────────────────────
-// Change this to your backend server IP when running locally.
-// e.g.  http://192.168.1.10:8000/api/v1  (find your IP with `ipconfig`)
-export const BASE_URL = 'http://10.159.111.162:8000/api/v1'; // Wi-Fi development IP
-
+// ─── Config ───────────────────────────────────────────────────────────────────
 const TOKEN_KEY = 'investiq_jwt';
+export const BASE_URL = API_BASE_URL;
+console.log(`[InvestIQ] API base URL: ${BASE_URL}`);
+
+let activeBaseURL = API_BASE_URL;
+let baseURLProbePromise = null;
+
+function inferLanBaseURLFromExpoHost() {
+    const hostUri = Constants?.expoConfig?.hostUri || Constants?.expoGoConfig?.debuggerHost;
+    if (!hostUri) {
+        return null;
+    }
+
+    const host = hostUri.split(':')[0];
+    if (!host || host === 'localhost' || host === '127.0.0.1') {
+        return null;
+    }
+    return `http://${host}:5000/api/v1`;
+}
+
+async function checkBaseURL(url) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    try {
+        const res = await fetch(`${url}/health`, { method: 'GET', signal: controller.signal });
+        return res.ok;
+    } catch {
+        return false;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+async function ensureActiveBaseURL() {
+    if (baseURLProbePromise) {
+        return baseURLProbePromise;
+    }
+
+    baseURLProbePromise = (async () => {
+        const inferred = inferLanBaseURLFromExpoHost();
+        const candidates = [
+            ...API_BASE_URL_CANDIDATES,
+            inferred,
+        ].filter(Boolean);
+
+        for (const candidate of candidates) {
+            const ok = await checkBaseURL(candidate);
+            if (ok) {
+                activeBaseURL = candidate;
+                console.log(`[InvestIQ] Active API base URL: ${activeBaseURL}`);
+                return activeBaseURL;
+            }
+        }
+
+        activeBaseURL = API_BASE_URL;
+        return activeBaseURL;
+    })();
+
+    try {
+        return await baseURLProbePromise;
+    } finally {
+        baseURLProbePromise = null;
+    }
+}
 
 // ─── Axios Instance ──────────────────────────────────────────────────────────
 const api = axios.create({
     baseURL: BASE_URL,
-    timeout: 60000, // 60s – ML inference for 5 stocks takes ~20-30s
+    timeout: REQUEST_TIMEOUT_MS,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -24,6 +85,7 @@ const api = axios.create({
 // ─── Request Interceptor – attach JWT ────────────────────────────────────────
 api.interceptors.request.use(
     async (config) => {
+        config.baseURL = await ensureActiveBaseURL();
         const token = await SecureStore.getItemAsync(TOKEN_KEY);
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -37,6 +99,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => response,
     (error) => {
+        if (!error?.response) {
+            return Promise.reject(new Error(NETWORK_ERROR_MESSAGE));
+        }
+
+        if (error?.code === 'ECONNABORTED') {
+            return Promise.reject(new Error('Request timed out. Please check your network and try again.'));
+        }
+
         const message =
             error?.response?.data?.detail ||
             error?.response?.data?.message ||
@@ -89,6 +159,20 @@ export const portfolioApi = {
 // ─── Health ───────────────────────────────────────────────────────────────────
 export const healthApi = {
     check: () => api.get('/health').then((r) => r.data),
+};
+
+export const diagnosticsApi = {
+    activeBaseURL: () => activeBaseURL,
+    checkConnectivity: async () => {
+        const url = await ensureActiveBaseURL();
+        const res = await api.get('/health', { baseURL: url });
+        return { url, data: res.data };
+    },
+};
+
+// ─── News ─────────────────────────────────────────────────────────────────────
+export const newsApi = {
+    getNews: (ticker) => api.get(`/news?ticker=${ticker}`).then((r) => r.data),
 };
 
 export default api;

@@ -21,11 +21,15 @@ def test_concept():
         # results is a list of list of dicts (because top_k=None)
         # [[{'label': 'positive', 'score': 0.9}, {'label': 'negative', 'score': 0.05}, ...]]
         
-        scores = {item['label']: item['score'] for item in results[0]}
+        scores: dict = {}
+        if isinstance(results, list) and len(results) > 0:
+            first_result = results[0] if isinstance(results[0], list) else results
+            if isinstance(first_result, list):
+                scores = {item.get('label', ''): float(item.get('score', 0)) for item in first_result if isinstance(item, dict)}
         
-        pos = scores.get('positive', 0)
-        neg = scores.get('negative', 0)
-        neu = scores.get('neutral', 0)
+        pos = float(scores.get('positive', 0))
+        neg = float(scores.get('negative', 0))
+        neu = float(scores.get('neutral', 0))
         
         compound = pos - neg
         

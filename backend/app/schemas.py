@@ -99,3 +99,19 @@ class SignalSummary(BaseModel):
 
 class BatchSignalResponse(BaseModel):
     signals: List[SignalSummary]
+
+# ─── News ─────────────────────────────────────────────────────
+class NewsArticle(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    publisher: Optional[str] = None
+    link: Optional[str] = None
+    providerPublishTime: Optional[Any] = None
+    relatedTickers: Optional[List[str]] = []
+    # Optionally store the computed sentiment for each article
+    sentiment_score: Optional[float] = None
+    sentiment_label: Optional[str] = None
+
+class NewsResponse(BaseModel):
+    symbol: str
+    articles: List[NewsArticle]

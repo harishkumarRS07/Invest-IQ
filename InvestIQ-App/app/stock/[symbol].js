@@ -72,7 +72,7 @@ export default function StockDetailScreen() {
             </View>
 
             <ScrollView
-                contentContainerStyle={styles.scroll}
+                contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + Spacing.xxl }]}
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl

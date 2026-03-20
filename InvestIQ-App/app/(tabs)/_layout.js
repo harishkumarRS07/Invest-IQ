@@ -1,22 +1,77 @@
 /**
  * Tab Layout
- * Uses tabBar prop so FloatingIQMenu receives proper navigation + state props.
+ * Standard Expo tabs to respect Safe Areas and System Buttons.
  */
 import { Tabs } from 'expo-router';
-import FloatingIQMenu from '../../src/components/FloatingIQMenu';
+import { useColors } from '../../src/context/ThemeContext';
+
+import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 
 export default function TabLayout() {
+    const C = useColors();
+
     return (
         <Tabs
-            tabBar={(props) => <FloatingIQMenu {...props} />}
             screenOptions={{
                 headerShown: false,
-                tabBarStyle: { display: 'none' },  // hide native bar
+                tabBarStyle: {
+                    backgroundColor: C.bg.elevated,
+                    borderTopColor: C.border.default,
+                },
+                tabBarItemStyle: {
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                },
+                tabBarLabelStyle: {
+                    fontSize: 12,
+                    fontWeight: '600',
+                    marginTop: 4,
+                },
+                tabBarActiveTintColor: C.brand.purple,
+                tabBarInactiveTintColor: C.text.muted,
             }}
         >
-            <Tabs.Screen name="dashboard" />
-            <Tabs.Screen name="portfolio" />
-            <Tabs.Screen name="settings" />
+            <Tabs.Screen
+                name="dashboard"
+                options={{
+                    title: 'Dashboard',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="analytics" size={size} color={color} />
+                    ),
+                    tabBarLabel: 'Dashboard'
+                }}
+            />
+            <Tabs.Screen
+                name="news"
+                options={{
+                    title: 'News',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="newspaper" size={size} color={color} />
+                    ),
+                    tabBarLabel: 'News'
+                }}
+            />
+            <Tabs.Screen
+                name="portfolio"
+                options={{
+                    title: 'Portfolio',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="pie-chart" size={size} color={color} />
+                    ),
+                    tabBarLabel: 'Portfolio'
+                }}
+            />
+            <Tabs.Screen
+                name="settings"
+                options={{
+                    title: 'Settings',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="settings" size={size} color={color} />
+                    ),
+                    tabBarLabel: 'Settings'
+                }}
+            />
         </Tabs>
     );
 }

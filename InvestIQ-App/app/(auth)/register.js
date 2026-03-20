@@ -110,13 +110,16 @@ export default function RegisterScreen() {
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            enabled={Platform.OS === 'ios'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
             style={styles.root}
         >
             <Animated.View style={[styles.blob1, blob1Style]} />
             <Animated.View style={[styles.blob2, blob2Style]} />
 
             <ScrollView
+                style={styles.scrollView}
                 contentContainerStyle={[
                     styles.scroll,
                     { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }
@@ -197,6 +200,7 @@ export default function RegisterScreen() {
 
 const makeStyles = (C) => StyleSheet.create({
     root: { flex: 1, backgroundColor: C.bg.primary },
+    scrollView: { flex: 1, backgroundColor: C.bg.primary },
     blob1: {
         position: 'absolute', top: -50, left: -100,
         width: 380, height: 380, borderRadius: 190,

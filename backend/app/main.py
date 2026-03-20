@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core.config import settings
+from backend.core.logging import logger
 from backend.app.routes import router
 from backend.app.auth import get_current_user
 from backend.training.auto_retrain import trigger_retrain, get_retrain_status
@@ -10,6 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from backend.data.update_stock_data import refined_update
 from typing import Optional
 from fastapi import Header, HTTPException
+from time import perf_counter
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -32,16 +34,12 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(refined_update, 'cron', hour=18, minute=0,
                       id='daily_data_update', name='Daily Stock Data Update')
 
-    # ② Weekly model retraining – every Sunday at 00:00 (midnight)
-    #    Runs in a background thread so it never blocks the event loop.
-    scheduler.add_job(trigger_retrain, 'cron', day_of_week='sun', hour=0, minute=0,
-                      id='weekly_retrain', name='Weekly Model Retrain',
-                      kwargs={'background': True})
+    # ② Weekly model retraining is disabled (Sunday schedule turned off).
 
     scheduler.start()
     print("Scheduler started.")
-    print("  → Daily data update: every day at 18:00")
-    print("  → Weekly retrain:    every Sunday at 00:00")
+    print("  -> Daily data update: every day at 18:00")
+    print("  -> Weekly retrain:    disabled")
 
     yield
 
@@ -65,6 +63,22 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix=settings.API_V1_STR)
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start = perf_counter()
+    client = request.client.host if request.client else "unknown"
+    method = request.method
+    path = request.url.path
+    try:
+        response = await call_next(request)
+        elapsed_ms = (perf_counter() - start) * 1000
+        logger.info(f"HTTP {method} {path} from {client} -> {response.status_code} ({elapsed_ms:.1f} ms)")
+        return response
+    except Exception:
+        elapsed_ms = (perf_counter() - start) * 1000
+        logger.exception(f"HTTP {method} {path} from {client} -> 500 ({elapsed_ms:.1f} ms)")
+        raise
 
 # ── Root ──────────────────────────────────────────────────────────────────────
 
@@ -92,4 +106,4 @@ def retrain_trigger(user: dict = Depends(_require_auth_header)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=5000, reload=True)

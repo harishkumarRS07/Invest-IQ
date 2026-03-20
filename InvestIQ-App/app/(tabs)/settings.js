@@ -100,7 +100,7 @@ export default function SettingsScreen() {
 
                 <Text style={styles.footer}>
                     InvestIQ © 2026 · AI-Powered Trading Intelligence{'\n'}
-                    For educational purposes only. Not financial advice.
+                    Fors financial advice.
                 </Text>
             </ScrollView>
         </View>

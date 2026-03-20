@@ -107,7 +107,9 @@ export default function LoginScreen() {
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            enabled={Platform.OS === 'ios'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
             style={styles.root}
         >
             {/* Background Decorations */}
@@ -115,6 +117,7 @@ export default function LoginScreen() {
             <Animated.View style={[styles.blob2, blob2Style]} />
 
             <ScrollView
+                style={styles.scrollView}
                 contentContainerStyle={[
                     styles.scroll,
                     { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }
@@ -202,6 +205,7 @@ export default function LoginScreen() {
 
 const makeStyles = (C) => StyleSheet.create({
     root: { flex: 1, backgroundColor: C.bg.primary },
+    scrollView: { flex: 1, backgroundColor: C.bg.primary },
     blob1: {
         position: 'absolute', top: -100, right: -100,
         width: 400, height: 400, borderRadius: 200,

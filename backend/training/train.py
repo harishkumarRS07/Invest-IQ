@@ -15,7 +15,6 @@ from backend.preprocessing.scaling import StockScaler
 from backend.features.indicators import add_technical_indicators, add_market_correlation
 from backend.features.external_data import ExternalDataSimulator
 from backend.models.transformer import TimeSeriesTransformer
-from backend.utils.training_utils import EarlyStopping
 
 # Ensure project root is in path
 sys.path.append(os.getcwd())
@@ -58,12 +57,24 @@ def train_pipeline(file_path: str):
         return
         
     df = clean_data(df)
+
+    # Use a uniform lookback window for all tickers before feature engineering.
+    # This keeps training coverage consistent across symbols.
+    if 'Date' in df.columns and not df['Date'].isnull().all():
+        latest_date = df['Date'].max()
+        window_start = latest_date - pd.DateOffset(years=25)
+        df = df[df['Date'] >= window_start].copy()
+        logger.info(
+            f"Using 25-year window for {ticker}: {window_start.date()} to {latest_date.date()}"
+        )
     
     # 2. Feature Engineering
     # Fetch Market Index (Only once per run ideally, but here per file for simplicity)
     # To avoid repeated API calls, we could fetch once outside, but let's try to fetch here.
     # In production, this should be cached.
-    market_df = ExternalDataSimulator.fetch_market_index(start_date=df.index[0], end_date=df.index[-1])
+    market_start = df['Date'].min() if 'Date' in df.columns else None
+    market_end = df['Date'].max() if 'Date' in df.columns else None
+    market_df = ExternalDataSimulator.fetch_market_index(start_date=market_start, end_date=market_end)
     
     df = add_technical_indicators(df)
     df = add_market_correlation(df, market_df)
@@ -154,9 +165,7 @@ def train_pipeline(file_path: str):
     # Scheduler
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
     
-    # Early Stopping
     checkpoint_path = os.path.join(settings.MODEL_DIR, f"transformer_{ticker}.pth")
-    early_stopping = EarlyStopping(patience=10, verbose=True, path=checkpoint_path)
     
     # 8. Training Loop
     logger.info(f"Training on {device}...")
@@ -191,11 +200,9 @@ def train_pipeline(file_path: str):
         # Step Scheduler
         scheduler.step(val_loss)
         
-        # Check Early Stopping
-        early_stopping(val_loss, model)
-        if early_stopping.early_stop:
-            logger.info("Early stopping triggered.")
-            break
+    # Save final model checkpoint after completing all epochs.
+    torch.save(model.state_dict(), checkpoint_path)
+    logger.info(f"Final model checkpoint saved to {checkpoint_path}")
             
     # Save Scaler and Metadata
     scaler.save(f"scaler_{ticker}.pkl")
