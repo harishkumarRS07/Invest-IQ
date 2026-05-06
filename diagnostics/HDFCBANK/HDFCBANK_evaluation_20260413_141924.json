@@ -1,0 +1,18 @@
+{
+  "ticker": "HDFCBANK",
+  "timestamp": "2026-04-13 14:19:24.596663",
+  "metrics": {
+    "accuracy": 0.5270092226613966,
+    "precision": 0.5533980582524272,
+    "recall": 0.56575682382134,
+    "f1_score": 0.5595092024539877,
+    "roc_auc": 0.5128704658878636,
+    "directional_accuracy": 0.0,
+    "win_rate": 0.0,
+    "total_return": 0.0,
+    "num_trades": 0,
+    "trade_coverage": 0.0,
+    "best_threshold_up": 0.6,
+    "best_threshold_down": 0.4
+  }
+}

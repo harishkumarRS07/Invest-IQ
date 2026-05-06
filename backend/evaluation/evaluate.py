@@ -11,7 +11,7 @@ from backend.preprocessing.cleaning import load_data, clean_data
 from backend.preprocessing.scaling import StockScaler
 from backend.features.indicators import add_technical_indicators, add_market_correlation
 from backend.features.external_data import ExternalDataSimulator
-from backend.models.transformer import TimeSeriesTransformer
+from backend.models.enhanced_models import LSTMAttentionEnhanced
 from backend.evaluation.metrics import calculate_metrics
 
 sys.path.append(os.getcwd())
@@ -62,17 +62,16 @@ def evaluate_pipeline(file_path: str):
     
     # Load Model
     input_dim = X.shape[2]
-    model = TimeSeriesTransformer(
+    model = LSTMAttentionEnhanced(
         input_dim=input_dim,
-        d_model=64,
-        nhead=settings.NHEAD,
-        num_layers=settings.NUM_LAYERS,
-        dropout=settings.DROPOUT,
+        hidden_dim=128,
+        num_layers=2,
         output_dim=1,
+        dropout=0.3,
         forecast_horizon=settings.FORECAST_HORIZON
     )
     
-    model_path = os.path.join(settings.MODEL_DIR, f"transformer_{ticker}.pth")
+    model_path = os.path.join(settings.MODEL_DIR, f"lstm_{ticker}.pth")
     if not os.path.exists(model_path):
         logger.error(f"Model not found for {ticker}")
         return

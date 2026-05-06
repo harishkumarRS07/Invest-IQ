@@ -1,0 +1,18 @@
+{
+  "ticker": "TCS",
+  "timestamp": "2026-04-15 14:03:13.319986",
+  "metrics": {
+    "accuracy": 0.5558419243986255,
+    "precision": 0.5552451391337276,
+    "recall": 0.6506452107645097,
+    "f1_score": 0.5989926227727632,
+    "roc_auc": 0.5545154035819763,
+    "directional_accuracy": 0.5327281414237935,
+    "win_rate": 0.5583691670648192,
+    "total_return": 0.05841908982574939,
+    "num_trades": 7,
+    "trade_coverage": 0.056701030927835044,
+    "best_threshold_up": 0.6,
+    "best_threshold_down": 0.4
+  }
+}

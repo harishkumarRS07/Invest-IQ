@@ -5,7 +5,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
-import { API_BASE_URL, API_BASE_URL_CANDIDATES, REQUEST_TIMEOUT_MS, NETWORK_ERROR_MESSAGE } from '../../config/api';
+import { API_BASE_URL, API_PORT, API_BASE_URL_CANDIDATES, REQUEST_TIMEOUT_MS, NETWORK_ERROR_MESSAGE } from '../../config/api';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const TOKEN_KEY = 'investiq_jwt';
@@ -14,6 +14,18 @@ console.log(`[InvestIQ] API base URL: ${BASE_URL}`);
 
 let activeBaseURL = API_BASE_URL;
 let baseURLProbePromise = null;
+
+function dedupeURLs(urls) {
+    return [...new Set(urls.filter(Boolean))];
+}
+
+function getBaseURLCandidates() {
+    const inferred = inferLanBaseURLFromExpoHost();
+    return dedupeURLs([
+        ...API_BASE_URL_CANDIDATES,
+        inferred,
+    ]);
+}
 
 function inferLanBaseURLFromExpoHost() {
     const hostUri = Constants?.expoConfig?.hostUri || Constants?.expoGoConfig?.debuggerHost;
@@ -25,14 +37,21 @@ function inferLanBaseURLFromExpoHost() {
     if (!host || host === 'localhost' || host === '127.0.0.1') {
         return null;
     }
-    return `http://${host}:5000/api/v1`;
+    return `http://${host}:${API_PORT}/api/v1`;
 }
 
 async function checkBaseURL(url) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
     try {
-        const res = await fetch(`${url}/health`, { method: 'GET', signal: controller.signal });
+        const res = await fetch(`${url}/health`, { 
+            method: 'GET', 
+            signal: controller.signal,
+            headers: {
+                'ngrok-skip-browser-warning': 'true',
+                'User-Agent': 'InvestIQ-App/1.0.0',
+            }
+        });
         return res.ok;
     } catch {
         return false;
@@ -47,11 +66,7 @@ async function ensureActiveBaseURL() {
     }
 
     baseURLProbePromise = (async () => {
-        const inferred = inferLanBaseURLFromExpoHost();
-        const candidates = [
-            ...API_BASE_URL_CANDIDATES,
-            inferred,
-        ].filter(Boolean);
+        const candidates = getBaseURLCandidates();
 
         for (const candidate of candidates) {
             const ok = await checkBaseURL(candidate);
@@ -79,6 +94,8 @@ const api = axios.create({
     timeout: REQUEST_TIMEOUT_MS,
     headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+        'User-Agent': 'InvestIQ-App/1.0.0',
     },
 });
 
@@ -98,7 +115,28 @@ api.interceptors.request.use(
 // ─── Response Interceptor – normalize errors ─────────────────────────────────
 api.interceptors.response.use(
     (response) => response,
-    (error) => {
+    async (error) => {
+        const originalRequest = error?.config || {};
+        const status = error?.response?.status;
+
+        // Retry on server/gateway errors (502, 503, 504)
+        if ((status === 502 || status === 503 || status === 504) && !originalRequest._investIQRetried) {
+            originalRequest._investIQRetried = true;
+            const candidates = getBaseURLCandidates().filter((url) => url !== activeBaseURL);
+
+            console.warn(`[InvestIQ] API status ${status}. Attempting failover from ${activeBaseURL}`);
+
+            for (const candidate of candidates) {
+                const ok = await checkBaseURL(candidate);
+                if (ok) {
+                    activeBaseURL = candidate;
+                    originalRequest.baseURL = candidate;
+                    console.warn(`[InvestIQ] Failover successful to ${candidate}`);
+                    return api.request(originalRequest);
+                }
+            }
+        }
+
         if (!error?.response) {
             return Promise.reject(new Error(NETWORK_ERROR_MESSAGE));
         }
@@ -141,7 +179,13 @@ export const stockApi = {
         api.post('/predict', { symbol }).then((r) => r.data),
 
     batchSignals: (symbols) =>
-        api.post('/signals/batch', { symbols }).then((r) => r.data.signals),
+        api.post('/signals/batch', { symbols }).then((r) => {
+            console.log('[API] Full batch signals response:', r);
+            console.log('[API] Response data:', r.data);
+            const signals = r.data.signals || r.data;
+            console.log('[API] Extracted signals:', signals);
+            return signals;
+        }),
 
     sentiment: (symbol) =>
         api.post('/sentiment/analyze', { symbol }).then((r) => r.data),

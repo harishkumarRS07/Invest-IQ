@@ -64,6 +64,9 @@ export default function DashboardScreen() {
     const C = useColors();
     const styles = useMemo(() => makeStyles(C), [C]);
 
+    // Debug logging
+    console.log('[Dashboard] signals:', signals, 'loading:', loading, 'error:', error);
+
     // Debounce search input: filtering only recalculates 300ms after user stops typing
     const debouncedSearch = useDebounce(search, 300);
 

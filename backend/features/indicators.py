@@ -1,11 +1,18 @@
 import pandas as pd
 import numpy as np
+import sys
+import os
 from typing import Optional
 from ta.momentum import rsi
 from ta.trend import MACD, sma_indicator
 from ta.volatility import AverageTrueRange, BollingerBands
 from ta.volume import volume_weighted_average_price
-from backend.core.logging import logger
+
+# Add backend to path
+backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, backend_path)
+
+from core.logging import logger
 
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """

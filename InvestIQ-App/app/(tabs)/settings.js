@@ -88,7 +88,7 @@ export default function SettingsScreen() {
                 <Card>
                     <SectionHeader title="About" />
                     <AboutRow label="App Version" value="1.0.0" styles={styles} />
-                    <AboutRow label="AI Model" value="Transformer + XGBoost" styles={styles} />
+                    <AboutRow label="AI Model" value="Hybrid (XGBoost + LSTM)" styles={styles} />
                     <AboutRow label="Data Source" value="Yahoo Finance" styles={styles} />
                     <AboutRow label="Backend" value="FastAPI + Python" styles={styles} />
                 </Card>

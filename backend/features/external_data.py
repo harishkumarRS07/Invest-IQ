@@ -1,25 +1,26 @@
 import numpy as np
 import pandas as pd
+import sys
+import os
 import yfinance as yf
-import hashlib
-from textblob import TextBlob
-from backend.core.logging import logger
 from typing import Optional, Union
+
+# Add backend to path
+backend_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, backend_path)
+
+from core.logging import logger
 
 class ExternalDataSimulator:
     """
     Handles external data sources (News Sentiment, Macroeconomics).
-    Supports both Simulation (for training/backtesting) and Live Fetching (for inference).
+    
+    PHASE 1 (Current): Only real features, no synthetic data
+    - Remove random sentiment and macro scores
+    - Focus on real market data and technical indicators
+    - Sentiment/Macro will be added only when real data pipeline is established
     """
     
-    @staticmethod
-    def get_sentiment(ticker: str, date: Optional[pd.Timestamp] = None) -> float:
-        """
-        Simulate News Sentiment Score (-1.0 to 1.0).
-        Used during training when historical news is hard to get.
-        """
-        return np.random.uniform(-1.0, 1.0)
-
     @staticmethod
     def _get_yf_ticker_string(ticker_symbol: str) -> str:
         """Helper to format string correctly."""
@@ -30,8 +31,9 @@ class ExternalDataSimulator:
     @staticmethod
     def fetch_live_news(ticker_symbol: str) -> list:
         """
-        Fetch real-world news articles representing the current state of a stock ticker.
-        Returns a list of structured dictionary articles natively decoded from Yahoo!
+        Fetch real-world news articles for inference only.
+        NOT used during training (to avoid data leakage).
+        Returns a list of structured dictionary articles from Yahoo Finance.
         """
         try:
             search_ticker = ExternalDataSimulator._get_yf_ticker_string(ticker_symbol)
@@ -52,7 +54,7 @@ class ExternalDataSimulator:
     def fetch_live_sentiment(ticker_symbol: str) -> float:
         """
         Fetch REAL news sentiment using yfinance and FinBERT.
-        Used during inference for real-time prediction.
+        Used during inference ONLY, not during training.
         """
         try:
             logger.info(f"Fetching live sentiment for {ticker_symbol}...")
@@ -60,6 +62,7 @@ class ExternalDataSimulator:
             news = ExternalDataSimulator.fetch_live_news(ticker_symbol)
             
             if not news:
+                logger.warning(f"No news available for {ticker_symbol}, returning neutral sentiment")
                 return 0.0
                 
             # Collect all titles
@@ -72,67 +75,60 @@ class ExternalDataSimulator:
                         titles.append(title)
             
             if not titles:
+                logger.warning(f"No titles found in news for {ticker_symbol}")
                 return 0.0
             
-            # Use our improved SentimentAnalyzer
-            from backend.features.sentiment import sentiment_analyzer
-            avg_sentiment = sentiment_analyzer.analyze(titles)
-            
-            logger.info(f"Live Sentiment for {ticker_symbol}: {avg_sentiment:.4f}")
-            return avg_sentiment
+            # Use real sentiment analyzer (optional - only if sentiment module is available)
+            try:
+                from backend.features.sentiment import sentiment_analyzer
+                avg_sentiment = sentiment_analyzer.analyze(titles)
+                logger.info(f"Live Sentiment for {ticker_symbol}: {avg_sentiment:.4f}")
+                return avg_sentiment
+            except ImportError:
+                logger.warning("Sentiment analyzer not available, returning neutral sentiment")
+                return 0.0
             
         except Exception as e:
             logger.error(f"Failed to fetch live sentiment for {ticker_symbol}: {e}")
             return 0.0
 
     @staticmethod
-    def get_macro_score(date: Optional[pd.Timestamp] = None) -> float:
+    def add_external_features(df: pd.DataFrame, ticker: str, use_real_data: bool = False) -> pd.DataFrame:
         """
-        Simulate Macroeconomic Health Score (0 to 100).
-        0 = Recession, 100 = Boom.
-        """
-        # Macro data changes slowly. 
-        # For simulation, we'll return a relatively stable random number 
-        # or just a random number for robust model training demonstration.
-        return np.random.uniform(40, 80)
-
-    @staticmethod
-    def add_external_features(df: pd.DataFrame, ticker: str, deterministic: bool = False) -> pd.DataFrame:
-        """
-        Enrich dataframe with simulated external features.
-        """
-        logger.info(f"Adding simulated external data for {ticker}...")
+        PHASE 1: DO NOT add external features during training.
         
-        # Generate synthetic data for the entire dataframe
-        # Using numpy for speed
-        n_rows = len(df)
+        This method is intentionally simplified to prevent synthetic data injection.
+        External features (sentiment, macro) will be added only during inference
+        when real data is available and no leakage occurs.
         
-        if deterministic:
-            seed_source = f"{ticker}|external_features_v1"
-            seed_bytes = hashlib.sha256(seed_source.encode("utf-8")).digest()[:8]
-            seed = int.from_bytes(seed_bytes, byteorder="big", signed=False)
-            rng = np.random.default_rng(seed)
-            sentiments = rng.uniform(-1.0, 1.0, n_rows)
-        else:
-            # Randomized simulation for training robustness.
-            sentiments = np.random.uniform(-1.0, 1.0, n_rows)
-        
-        # Macro: Slow moving random walk
-        # Start at 60, move by small steps
-        macro_scores = []
-        current_macro = 60.0
-        for _ in range(n_rows):
-            if deterministic:
-                change = rng.normal(0, 0.5)
-            else:
-                change = np.random.normal(0, 0.5)
-            current_macro = np.clip(current_macro + change, 0, 100)
-            macro_scores.append(current_macro)
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            Stock data
+        ticker : str
+            Stock ticker symbol
+        use_real_data : bool
+            If True, will attempt to fetch real sentiment data (for inference only)
+            If False, returns dataframe unchanged (for training)
             
-        df = df.copy()
-        df['Sentiment'] = sentiments
-        df['Macro_Score'] = np.array(macro_scores)
+        Returns:
+        --------
+        pd.DataFrame
+            Dataframe with optional real features, NO synthetic data
+        """
+        logger.info(f"Skipping synthetic external features for {ticker} (PHASE 1: Real data only)")
         
+        # During training, we don't add external features
+        # This prevents the model from learning spurious correlations from random data
+        # Features should be: Price, Volume, Technical Indicators only
+        
+        if use_real_data:
+            # This would be used during inference only
+            logger.info(f"Attempting to add REAL sentiment for {ticker} (inference only)...")
+            sentiment = ExternalDataSimulator.fetch_live_sentiment(ticker)
+            # Don't add historical sentiment during training
+            # Only add to inference requests
+            
         return df
 
     @staticmethod

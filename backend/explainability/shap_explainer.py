@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 from backend.core.config import settings
 from backend.core.logging import logger
-from backend.models.transformer import TimeSeriesTransformer
+from backend.models.enhanced_models import LSTMAttentionEnhanced
 
 class SHAPExplainer:
     def __init__(self, model, background_data):
@@ -40,18 +40,17 @@ class SHAPExplainer:
 
 def generate_shap_plots(ticker, X_train, X_test, feature_names):
     try:
-        # Load Model
+        # Load Model (LSTM + FinBERT + XGBoost architecture)
         input_dim = X_train.shape[2]
-        model = TimeSeriesTransformer(
+        model = LSTMAttentionEnhanced(
             input_dim=input_dim,
-            d_model=64,
-            nhead=settings.NHEAD,
-            num_layers=settings.NUM_LAYERS,
-            dropout=settings.DROPOUT,
+            hidden_dim=128,
+            num_layers=2,
             output_dim=1,
+            dropout=0.3,
             forecast_horizon=settings.FORECAST_HORIZON
         )
-        model_path = os.path.join(settings.MODEL_DIR, f"transformer_{ticker}.pth")
+        model_path = os.path.join(settings.MODEL_DIR, f"lstm_{ticker}.pth")
         model.load_state_dict(torch.load(model_path))
         model.eval()
         

@@ -25,9 +25,14 @@ export function useStockSignals(tickers = DEFAULT_TICKERS) {
         setError(null);
         try {
             const data = await stockApi.batchSignals(tickers);
-            setSignals(data);
+            console.log('[useStockSignals] Fetched data:', data);
+            // Ensure data is an array
+            const signalsArray = Array.isArray(data) ? data : (data?.signals && Array.isArray(data.signals) ? data.signals : []);
+            console.log('[useStockSignals] Final signals array:', signalsArray, 'count:', signalsArray.length);
+            setSignals(signalsArray);
             lastFetchRef.current = Date.now();
         } catch (err) {
+            console.error('[useStockSignals] Error:', err.message);
             setError(err.message);
         } finally {
             setLoading(false);

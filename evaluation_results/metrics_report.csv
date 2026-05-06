@@ -1,0 +1,12 @@
+Metric,Value
+Total Stocks Evaluated,5.0
+Average Confidence,0.56064
+High Confidence (>60%),0.0
+Medium Confidence (50-60%),5.0
+Low Confidence (<50%),0.0
+BUY Signals,0.0
+HOLD Signals,5.0
+SELL Signals,0.0
+Bullish Stocks (>0.5% expected change),0.0
+Bearish Stocks (<-0.5% expected change),0.0
+Average Expected Change,0.03356912810403486

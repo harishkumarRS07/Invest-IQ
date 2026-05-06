@@ -1,0 +1,168 @@
+====================================================================================================
+INVESTIQ COMPREHENSIVE MODEL EVALUATION REPORT
+====================================================================================================
+
+Generated: 2026-04-09 20:16:56
+Total Stocks Evaluated: 5
+
+====================================================================================================
+OVERALL STATISTICS
+====================================================================================================
+
+Confidence Scores:
+  Average Confidence: 56.06%
+  Max Confidence: 57.80%
+  Min Confidence: 55.41%
+  Std Deviation: 0.0088
+  High (>60%): 0 stocks
+  Medium (50-60%): 5 stocks
+  Low (<50%): 0 stocks
+
+Signal Predictions:
+  BUY Signals: 0 (0.0%)
+  HOLD Signals: 5 (100.0%)
+  SELL Signals: 0 (0.0%)
+
+Average Probabilities Across All Stocks:
+  Average BUY Probability: 21.97%
+  Average HOLD Probability: 56.06%
+  Average SELL Probability: 21.97%
+
+Price Change Predictions:
+  Average Expected Change: +0.0336%
+  Max Expected Increase: +0.1868%
+  Max Expected Decrease: -0.0483%
+  Bullish Stocks (>0.5%): 0 stocks
+  Neutral Stocks (-0.5% to 0.5%): 5 stocks
+  Bearish Stocks (<-0.5%): 0 stocks
+
+====================================================================================================
+DETAILED STOCK-BY-STOCK ANALYSIS
+====================================================================================================
+
+HDFCBANK
+--------------------------------------------------
+  Signal: HOLD
+  Model Confidence: 57.80%
+  Current Price: ₹797.25
+  Predicted Price: ₹798.74
+  Expected Change: +0.1868%
+
+  Signal Probabilities:
+    BUY Probability: 21.10%
+    HOLD Probability: 57.80%
+    SELL Probability: 21.10%
+
+  Analysis:
+    Primary Signal: HOLD with 57.80% confidence (MEDIUM)
+    Signal Strength: 57.80% (highest probability)
+    Price Outlook: NEUTRAL (minimal change expected at +0.1868%)
+
+ICICIBANK
+--------------------------------------------------
+  Signal: HOLD
+  Model Confidence: 55.41%
+  Current Price: ₹1280.75
+  Predicted Price: ₹1281.10
+  Expected Change: +0.0274%
+
+  Signal Probabilities:
+    BUY Probability: 22.30%
+    HOLD Probability: 55.41%
+    SELL Probability: 22.30%
+
+  Analysis:
+    Primary Signal: HOLD with 55.41% confidence (MEDIUM)
+    Signal Strength: 55.41% (highest probability)
+    Price Outlook: NEUTRAL (minimal change expected at +0.0274%)
+
+INFY
+--------------------------------------------------
+  Signal: HOLD
+  Model Confidence: 55.72%
+  Current Price: ₹1331.50
+  Predicted Price: ₹1330.86
+  Expected Change: -0.0483%
+
+  Signal Probabilities:
+    BUY Probability: 22.14%
+    HOLD Probability: 55.72%
+    SELL Probability: 22.14%
+
+  Analysis:
+    Primary Signal: HOLD with 55.72% confidence (MEDIUM)
+    Signal Strength: 55.72% (highest probability)
+    Price Outlook: NEUTRAL (minimal change expected at -0.0483%)
+
+RELIANCE
+--------------------------------------------------
+  Signal: HOLD
+  Model Confidence: 55.71%
+  Current Price: ₹1329.40
+  Predicted Price: ₹1330.03
+  Expected Change: +0.0470%
+
+  Signal Probabilities:
+    BUY Probability: 22.14%
+    HOLD Probability: 55.71%
+    SELL Probability: 22.14%
+
+  Analysis:
+    Primary Signal: HOLD with 55.71% confidence (MEDIUM)
+    Signal Strength: 55.71% (highest probability)
+    Price Outlook: NEUTRAL (minimal change expected at +0.0470%)
+
+TCS
+--------------------------------------------------
+  Signal: HOLD
+  Model Confidence: 55.68%
+  Current Price: ₹2587.75
+  Predicted Price: ₹2586.58
+  Expected Change: -0.0451%
+
+  Signal Probabilities:
+    BUY Probability: 22.16%
+    HOLD Probability: 55.68%
+    SELL Probability: 22.16%
+
+  Analysis:
+    Primary Signal: HOLD with 55.68% confidence (MEDIUM)
+    Signal Strength: 55.68% (highest probability)
+    Price Outlook: NEUTRAL (minimal change expected at -0.0451%)
+
+
+====================================================================================================
+SUMMARY STATISTICS TABLE
+====================================================================================================
+
+Stock        Signal   Confidence   Price Change    BUY %      HOLD %     SELL %    
+-----------------------------------------------------------------------------------
+HDFCBANK     HOLD         57.80%      +0.1868%     21.10%     57.80%     21.10%
+ICICIBANK    HOLD         55.41%      +0.0274%     22.30%     55.41%     22.30%
+INFY         HOLD         55.72%      -0.0483%     22.14%     55.72%     22.14%
+RELIANCE     HOLD         55.71%      +0.0470%     22.14%     55.71%     22.14%
+TCS          HOLD         55.68%      -0.0451%     22.16%     55.68%     22.16%
+
+
+====================================================================================================
+MODEL ACCURACY & CONFIDENCE INSIGHTS
+====================================================================================================
+
+Model Performance:
+  Overall Average Confidence: 56.06%
+  Confidence Range: 55.41% - 57.80%
+  Prediction Consistency: 99.12%
+
+Signal Distribution Accuracy:
+  BUY Signals: 0 out of 5 (0.0%)
+  HOLD Signals: 5 out of 5 (100.0%)
+  SELL Signals: 0 out of 5 (0.0%)
+
+Probability Calibration:
+  Average BUY Signal: 21.97%
+  Average HOLD Signal: 56.06%
+  Average SELL Signal: 21.97%
+
+====================================================================================================
+END OF REPORT
+====================================================================================================

@@ -16,7 +16,11 @@ class Settings(BaseSettings):
     # Training Params
     EPOCHS: int = 100
     BATCH_SIZE: int = 32
-    LEARNING_RATE: float = 0.001
+    LEARNING_RATE: float = 0.0003
+
+    # Inference mode flags
+    INFERENCE_MODE: str = "legacy"  # "legacy" | "hybrid"
+    HYBRID_FALLBACK_TO_LEGACY: bool = True
     
     # Advanced Model Params
     DROPOUT: float = 0.1

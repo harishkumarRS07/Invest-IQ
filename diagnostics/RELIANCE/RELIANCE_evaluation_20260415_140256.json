@@ -1,0 +1,18 @@
+{
+  "ticker": "RELIANCE",
+  "timestamp": "2026-04-15 14:02:56.735401",
+  "metrics": {
+    "accuracy": 0.5208333333333334,
+    "precision": 0.5639525911055879,
+    "recall": 0.5181011147848217,
+    "f1_score": 0.5318281440418907,
+    "roc_auc": 0.5763814974437718,
+    "directional_accuracy": 0.5913410419989367,
+    "win_rate": 0.5601741095162148,
+    "total_return": 0.09931156133372539,
+    "num_trades": 48,
+    "trade_coverage": 0.07708333333333332,
+    "best_threshold_up": 0.6,
+    "best_threshold_down": 0.4
+  }
+}

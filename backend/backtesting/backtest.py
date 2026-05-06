@@ -5,7 +5,7 @@ import glob
 import torch
 from backend.core.config import settings
 from backend.core.logging import logger
-from backend.models.transformer import TimeSeriesTransformer
+from backend.models.enhanced_models import LSTMAttentionEnhanced
 from backend.preprocessing.scaling import StockScaler
 from backend.training.train import create_sequences
 from backend.preprocessing.cleaning import load_data, clean_data
@@ -23,7 +23,7 @@ class Backtester:
         self.history = []
         
         # Load Resources
-        self.model_path = os.path.join(settings.MODEL_DIR, f"transformer_{ticker}.pth")
+        self.model_path = os.path.join(settings.MODEL_DIR, f"lstm_{ticker}.pth")
         self.scaler_path = f"scaler_{ticker}.pkl"
         self.scaler = StockScaler()
         try:
@@ -34,13 +34,12 @@ class Backtester:
             self.feature_columns = []
 
     def load_model(self, input_dim):
-        model = TimeSeriesTransformer(
+        model = LSTMAttentionEnhanced(
             input_dim=input_dim,
-            d_model=64,
-            nhead=settings.NHEAD,
-            num_layers=settings.NUM_LAYERS,
-            dropout=settings.DROPOUT,
+            hidden_dim=128,
+            num_layers=2,
             output_dim=1,
+            dropout=0.3,
             forecast_horizon=settings.FORECAST_HORIZON
         )
         model.load_state_dict(torch.load(self.model_path))

@@ -1,0 +1,18 @@
+{
+  "ticker": "ICICIBANK",
+  "timestamp": "2026-04-15 14:02:22.711233",
+  "metrics": {
+    "accuracy": 0.4859882005899705,
+    "precision": 0.5494368510734272,
+    "recall": 0.3968998183812838,
+    "f1_score": 0.45725267016280063,
+    "roc_auc": 0.4724253144654088,
+    "directional_accuracy": 0.4322419329001163,
+    "win_rate": 0.6063018450030297,
+    "total_return": 0.23418417835521624,
+    "num_trades": 21,
+    "trade_coverage": 0.08628318584070797,
+    "best_threshold_up": 0.6,
+    "best_threshold_down": 0.4
+  }
+}

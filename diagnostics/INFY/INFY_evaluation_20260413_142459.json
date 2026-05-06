@@ -1,0 +1,18 @@
+{
+  "ticker": "INFY",
+  "timestamp": "2026-04-13 14:24:59.305105",
+  "metrics": {
+    "accuracy": 0.5169491525423728,
+    "precision": 0.5191387559808612,
+    "recall": 0.5228915662650603,
+    "f1_score": 0.5210084033613446,
+    "roc_auc": 0.5087503297862985,
+    "directional_accuracy": 0.5368421052631579,
+    "win_rate": 0.5263157894736842,
+    "total_return": -0.02505928569707594,
+    "num_trades": 95,
+    "trade_coverage": 0.11501210653753027,
+    "best_threshold_up": 0.5165837407112122,
+    "best_threshold_down": 0.48341625928878784
+  }
+}

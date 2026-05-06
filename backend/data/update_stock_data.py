@@ -35,9 +35,18 @@ def update_stock_data():
         try:
             # Load existing data
             df = pd.read_csv(file_path)
-            
-            # Ensure Date column is datetime
-            df['Date'] = pd.to_datetime(df['Date'])
+
+            # Normalize legacy CSVs that include an extra ticker-header row
+            # and coerce numeric columns to proper dtypes.
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            df = df.dropna(subset=['Date']).copy()
+            for col in ['Open', 'High', 'Low', 'Close', 'Volume', 'VWAP']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            # Ensure required numeric fields are valid for cumulative VWAP math.
+            df['Volume'] = df['Volume'].fillna(0.0)
+            df['VWAP'] = df['VWAP'].ffill().fillna(0.0)
             
             if df.empty:
                 print(f"  {filename} is empty.")
@@ -69,8 +78,8 @@ def update_stock_data():
             # Calculate cumulative values for VWAP from existing data
             # VWAP = Total_PV / Total_Volume
             # Total_PV = Last_VWAP * Total_Cumulative_Volume
-            current_total_volume = df['Volume'].sum()
-            last_vwap = df['VWAP'].iloc[-1]
+            current_total_volume = float(df['Volume'].sum())
+            last_vwap = float(df['VWAP'].iloc[-1])
             current_total_pv = last_vwap * current_total_volume
             
             new_rows = []

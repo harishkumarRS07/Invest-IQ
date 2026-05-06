@@ -17,6 +17,11 @@ class Indicators(BaseModel):
     vwap: Optional[float] = None
     atr: Optional[float] = None
 
+class Probabilities(BaseModel):
+    sell: Optional[float] = None    # 0.0 – 1.0
+    hold: Optional[float] = None    # 0.0 – 1.0
+    buy: Optional[float] = None     # 0.0 – 1.0
+
 class PredictionResponse(BaseModel):
     symbol: str
     current_price: float
@@ -27,6 +32,7 @@ class PredictionResponse(BaseModel):
     signal_confidence: float    # 0.0 – 1.0
     risk_level: str             # Low | Medium | High
     indicators: Indicators = Indicators()
+    probabilities: Optional[Probabilities] = None
     explanation: str = ""
 
 # ─── Training ─────────────────────────────────────────────────
@@ -95,6 +101,7 @@ class SignalSummary(BaseModel):
     risk_level: str
     pct_change: float
     indicators: Indicators = Indicators()
+    probabilities: Optional[Probabilities] = None
     explanation: str = ""
 
 class BatchSignalResponse(BaseModel):
